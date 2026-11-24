@@ -274,8 +274,8 @@ public class StopEditTests
         var now = At(3, 15);
         Assert.Equal(ScheduleProblem.None, StopEdit.Apply(schedules, cart, 3, 20 * 60, 24 * 60 + 30, out var moved));
         Assert.False(StopEdit.MustClose(cart, moved, now));
-        StopEdit.ForgetYesterday(cart, moved, now);
         HireRunner.Replan(cart, now);
+        StopEdit.RetimeYesterday(cart, moved, now);
         runner.EnsurePlan(cart, now + 1, 400, 0);
 
         Assert.Equal(HireActionKind.None, runner.Step(cart, At(3, 29), bars).Kind);
@@ -283,14 +283,61 @@ public class StopEditTests
     }
 
     [Fact]
-    public void OnlyAnEditToYesterdaysStopForgetsYesterdaysPlan()
+    public void ShorteningYesterdaysOpenStopNearItsBayKeepsTheCartOpenUntilTheNewClose()
+    {
+        var runner = new HireRunner(ShippedData.Rules.Fleet);
+        var cart = WeekTestData.AllDay(Cart(Stop(DayOfWeek.Monday, "bars", 400, 20 * 60, 26 * 60)));
+        var bay = (X: 424.0, Z: 0.0);
+        var bars = new VehicleWhere(400, 0, leaveAlone: false, home: bay);
+        runner.EnsurePlan(cart, At(1, 20 * 60), 400, 0, home: bay);
+        cart.IsOpen = true;
+        cart.HireStop = 0;
+        var now = At(2, 15);
+        runner.EnsurePlan(cart, now, 400, 0, home: bay);
+        Assert.Equal(HireActionKind.None, runner.Step(cart, now, bars).Kind);
+
+        Assert.Equal(ScheduleProblem.None, StopEdit.Apply(schedules, cart, 0, 20 * 60, 24 * 60 + 20, out var moved));
+        HireRunner.Replan(cart, now);
+        StopEdit.RetimeYesterday(cart, moved, now);
+        Assert.False(StopEdit.MustClose(cart, moved, now));
+        runner.EnsurePlan(cart, now, 400, 0, home: bay);
+
+        Assert.Equal(HireActionKind.None, runner.Step(cart, now, bars).Kind);
+        Assert.Equal(HireActionKind.None, runner.Step(cart, At(2, 19), bars).Kind);
+        Assert.Equal(HireActionKind.Close, runner.Step(cart, At(2, 20), bars).Kind);
+    }
+
+    [Fact]
+    public void LengtheningYesterdaysOpenStopKeepsTheCartOpenUntilTheNewClose()
+    {
+        var runner = new HireRunner(ShippedData.Rules.Fleet);
+        var cart = WeekTestData.AllDay(Cart(Stop(DayOfWeek.Monday, "bars", 400, 20 * 60, 25 * 60)));
+        var bay = (X: 424.0, Z: 0.0);
+        var bars = new VehicleWhere(400, 0, leaveAlone: false, home: bay);
+        runner.EnsurePlan(cart, At(1, 20 * 60), 400, 0, home: bay);
+        cart.IsOpen = true;
+        cart.HireStop = 0;
+        var now = At(2, 15);
+
+        Assert.Equal(ScheduleProblem.None, StopEdit.Apply(schedules, cart, 0, 20 * 60, 26 * 60, out var moved));
+        HireRunner.Replan(cart, now);
+        StopEdit.RetimeYesterday(cart, moved, now);
+        runner.EnsurePlan(cart, now, 400, 0, home: bay);
+
+        Assert.Equal(HireActionKind.None, runner.Step(cart, At(2, 90), bars).Kind);
+        Assert.Equal(HireActionKind.None, runner.Step(cart, At(2, 119), bars).Kind);
+        Assert.Equal(HireActionKind.Close, runner.Step(cart, At(2, 120), bars).Kind);
+    }
+
+    [Fact]
+    public void OnlyAnEditToYesterdaysStopForgetsYesterdaysPlanWhenTheCartIsNotServingIt()
     {
         var cart = WeekTestData.AllDay(Week());
         cart.Shifts = new List<ShiftPlan> { new() { Day = 2 }, new() { Day = 3 } };
 
-        StopEdit.ForgetYesterday(cart, 0, At(3, 15));
+        StopEdit.RetimeYesterday(cart, 0, At(3, 15));
         Assert.Equal(new[] { 2, 3 }, cart.Shifts.Select(p => p.Day).ToArray());
-        StopEdit.ForgetYesterday(cart, 3, At(3, 15));
+        StopEdit.RetimeYesterday(cart, 3, At(3, 15));
         Assert.Equal(new[] { 3 }, cart.Shifts.Select(p => p.Day).ToArray());
     }
 

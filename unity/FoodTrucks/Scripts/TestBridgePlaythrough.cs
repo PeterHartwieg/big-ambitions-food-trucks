@@ -330,9 +330,9 @@ namespace FoodTrucks
                 if (problem == ScheduleProblem.None)
                 {
                     var now = HireCrew.Now();
-                    StopEdit.ForgetYesterday(vehicle, at, now);
                     RouteStops.Changed(vehicle);
                     at = vehicle.Schedule!.Stops.IndexOf(edited);
+                    StopEdit.RetimeYesterday(vehicle, at, now);
                     if (StopEdit.MustClose(vehicle, at, now))
                     {
                         CartSelling.CloseByCrew(vehicle, now);

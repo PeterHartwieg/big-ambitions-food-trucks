@@ -69,12 +69,25 @@ namespace FoodTrucks.Core.Fleet
             return problem;
         }
 
-        public static void ForgetYesterday(VehicleState vehicle, int index, long now)
+        public static void RetimeYesterday(VehicleState vehicle, int index, long now)
         {
             if (vehicle == null) throw new ArgumentNullException(nameof(vehicle));
             var stop = vehicle.Schedule?.Stops?.ElementAtOrDefault(index);
             var day = GameDays.DayOf(now);
-            if (stop != null && stop.Day == WeekPlan.Previous(GameDays.Weekday(day))) vehicle.Shifts?.RemoveAll(p => p.Day == day - 1);
+            if (stop == null || stop.Day != WeekPlan.Previous(GameDays.Weekday(day)) || vehicle.Shifts == null) return;
+            var plan = vehicle.Shifts.FirstOrDefault(p => p?.Legs != null && p.Day == day - 1);
+            var leg = plan?.Legs.FirstOrDefault(l => l.Kind == LegKind.Open && l.StopIndex == index && l.Start <= now && l.End > now);
+            if (plan == null || leg == null || !vehicle.IsOpen || vehicle.HireStop != index)
+            {
+                vehicle.Shifts.RemoveAll(p => p.Day == day - 1);
+                return;
+            }
+            var close = HireSchedules.Absolute(day - 1, stop.CloseAt);
+            var span = WeekPlan.CoverageOf(vehicle.Schedule, vehicle.Crew, now - 1440, close + 1440).Spans
+                .Where(c => c.Start <= now && c.End > now).Select(c => (long?)c.End).FirstOrDefault();
+            var oldEnd = leg.End;
+            leg.End = Math.Max(now, span == null ? close : Math.Min(close, span.Value));
+            plan.Legs.RemoveAll(l => l != leg && l.Start >= oldEnd);
         }
 
         public static bool ClosePassed(ScheduleStop stop, long now)
