@@ -216,7 +216,7 @@ namespace FoodTrucks
 
         private static object RouteCommand(JObject args)
         {
-            var op = Need(args, "op", "add_stop or paste_day");
+            var op = Need(args, "op", "add_stop, paste_day or edit_stop");
             if (op == "catalogue") return StopCatalogue(args);
             var id = Need(args, "vehicle", "the food vehicle's id");
             var instance = FoodVehicle(id);
@@ -285,9 +285,79 @@ namespace FoodTrucks
                         ["notices"] = new JArray(notices), ["state"] = TestBridgeState.Vehicle(state, instance),
                     });
                 }
+                case "edit_stop":
+                    return EditStop(args, id, instance, state, rules);
                 default:
-                    throw new BridgeError($"Unknown route op '{op}': add_stop, paste_day.");
+                    throw new BridgeError($"Unknown route op '{op}': add_stop, paste_day, edit_stop.");
             }
+        }
+
+        private static object EditStop(JObject args, string id, VehicleInstance instance, SaveState state, FoodTrucks.Core.Rules.RuleTables rules)
+        {
+            var vehicle = StreetSales.Find(state, id) ?? throw new BridgeError($"{id} has no route to edit.");
+            var index = WholeArg(args, "index");
+            var day = args["day"] == null || args["day"]!.Type == JTokenType.Null ? (DayOfWeek?)null : Days(args["day"], "day", single: true)[0];
+            var stop = WholeArg(args, "stop");
+            var address = Str(args, "address");
+            Func<ScheduleStop, bool>? atAddress = null;
+            if (address != null)
+            {
+                if (!AddressForm.IsMatch(address))
+                    throw new BridgeError($"\"address\" is a building's address as the game writes it, ba:street_<name>#<number>; got '{address}'.");
+                var doors = World.EntrancesOf(address) ?? throw new BridgeError($"no building at {address} in this city");
+                if (doors.Length == 0) throw new BridgeError($"the building at {address} has no entrance");
+                atAddress = s => doors.Any(d => Math.Sqrt((d.x - s.X) * (d.x - s.X) + (d.z - s.Z) * (d.z - s.Z)) <= StopSnap.MaxMetres);
+            }
+            var open = ClockArg(args, "open");
+            var close = ClockArg(args, "close");
+            int picked;
+            int newOpen, newClose;
+            try
+            {
+                picked = StopEdit.Pick(vehicle.Schedule, index, day, stop, atAddress);
+                (newOpen, newClose) = StopEdit.Hours(vehicle.Schedule!.Stops[picked], open, close);
+            }
+            catch (StopEditRefused refused) { throw new BridgeError(refused.Message); }
+            var problem = ScheduleProblem.None;
+            var at = picked;
+            var closed = false;
+            var edited = vehicle.Schedule!.Stops[picked];
+            return WithNotices(() =>
+            {
+                problem = StopEdit.Apply(new HireSchedules(rules.Fleet), vehicle, picked, newOpen, newClose, out at);
+                if (problem == ScheduleProblem.None)
+                {
+                    var now = HireCrew.Now();
+                    if (StopEdit.MustClose(vehicle, at, now))
+                    {
+                        CartSelling.CloseByCrew(vehicle, now);
+                        closed = !vehicle.IsOpen;
+                    }
+                    RouteStops.Changed(vehicle);
+                }
+                Log.Info($"Test bridge: route edit_stop {id}: stop {picked} of the week to {StopEdit.Clock(newOpen)}-{StopEdit.Clock(newClose)}: {problem}" +
+                         (problem == ScheduleProblem.None ? $", now index {at}{(closed ? ", closed (its new close has passed)" : "")}." : "."));
+            }, notices =>
+            {
+                var now = vehicle.Schedule?.Stops?.IndexOf(edited) ?? -1;
+                return new JObject
+                {
+                    ["done"] = problem == ScheduleProblem.None, ["problem"] = problem == ScheduleProblem.None ? null : problem.ToString(),
+                    ["vehicle"] = id, ["index"] = now < 0 ? (int?)null : now, ["day"] = edited.Day.ToString().ToLowerInvariant(),
+                    ["open"] = StopEdit.Clock(edited.OpenAt), ["close"] = StopEdit.Clock(edited.CloseAt),
+                    ["notices"] = new JArray(notices), ["state"] = TestBridgeState.Vehicle(state, instance),
+                };
+            });
+        }
+
+        private static int? WholeArg(JObject args, string key)
+        {
+            var token = args[key];
+            if (token == null || token.Type == JTokenType.Null) return null;
+            var value = Num(args, key);
+            if (value == null || value.Value != Math.Floor(value.Value) || value.Value < 0 || value.Value > int.MaxValue)
+                throw new BridgeError($"\"{key}\" is a whole number from 0.");
+            return (int)value.Value;
         }
 
         private static List<DayOfWeek> Days(JToken? token, string key, bool single = false)

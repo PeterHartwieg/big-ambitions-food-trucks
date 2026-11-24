@@ -60,7 +60,7 @@ Code comments are banned (see `AGENTS.md`). The comments listed here were kept b
 - `tools/ftlib/shots.py:26` workaround
 - `tools/game-lock.sh:1-2` temporary
 - `tools/mock-bridge:143-144` imperfect-choice
-- `tools/mock-bridge:1787` imperfect-choice
+- `tools/mock-bridge:1852` imperfect-choice
 - `tools/run-remote.sh:30` workaround
 - `tools/tests/crew_probe_shape/Scenarios.cs:68` known-gap
 - `tools/tests/event_locations/Scenarios.cs:235` imperfect-choice
