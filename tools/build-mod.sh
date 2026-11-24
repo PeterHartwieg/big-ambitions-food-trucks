@@ -58,14 +58,15 @@ fi
 echo "$HARMONY_DLL_SHA256  $DEPS/0Harmony.dll" | shasum -a 256 -c - >/dev/null || { echo "Cached 0Harmony.dll does not match the pinned hash; delete it and rebuild" >&2; exit 1; }
 
 stage_core() {
-  dotnet build "$REPO/Core/FoodTrucks.Core.csproj" -c Release -nologo -v quiet "$@"
-  cp "$REPO/Core/bin/Release/netstandard2.1/FoodTrucks.Core.dll" "$DEPS/FoodTrucks.Core.dll"
+  dotnet build "$REPO/Core/FoodTrucks.Core.csproj" -c Release -nologo -v quiet "$@" || return 1
+  cp "$REPO/Core/bin/Release/netstandard2.1/FoodTrucks.Core.dll" "$DEPS/FoodTrucks.Core.dll" || return 1
 }
 restore_default_core() {
   local rc=$?
   trap - EXIT
-  if ! (set -e; stage_core); then
-    echo "Could not restore the default FoodTrucks.Core.dll in $DEPS; rebuild without a test flag before any other Unity build" >&2
+  if ! stage_core; then
+    rm -f "$DEPS/FoodTrucks.Core.dll"
+    echo "Could not restore the default FoodTrucks.Core.dll; removed the test build's copy from $DEPS. Rebuild without a test flag before any other Unity build" >&2
     rc=1
   fi
   exit "$rc"

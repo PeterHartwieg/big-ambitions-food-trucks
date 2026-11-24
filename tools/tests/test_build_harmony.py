@@ -55,6 +55,8 @@ elif command == 'dotnet':
         calls.write(' '.join(args) + '\n')
     if 'build' in args and any(a.endswith('FoodTrucks.Core.csproj') for a in args):
         props = [a for a in args if 'FoodTrucksTest' in a]
+        if not props and os.environ.get('HARNESS_DEFAULT_CORE_FAIL'):
+            sys.exit(23)
         (root / 'Core/bin/Release/netstandard2.1/FoodTrucks.Core.dll').write_text(' '.join(props) or 'default')
 elif command not in ('rsync', 'python3'):
     sys.exit('unexpected command: ' + command)
@@ -117,7 +119,7 @@ class BuildHarmonyTests(unittest.TestCase):
             'UNITY': str(stub.parent / 'unity'),
             'TMPDIR': str(self.root),
         })
-        for key in ('HARNESS_CURL_FAIL', 'HARNESS_REMOVE_NOTICE', 'HARNESS_UNITY_FAIL'):
+        for key in ('HARNESS_CURL_FAIL', 'HARNESS_REMOVE_NOTICE', 'HARNESS_UNITY_FAIL', 'HARNESS_DEFAULT_CORE_FAIL'):
             self.env.pop(key, None)
 
     def write_package(self, dll=DLL, notice=NOTICE):
@@ -230,6 +232,15 @@ class BuildHarmonyTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual((self.deps / 'FoodTrucks.Core.dll').read_text(), 'default')
         self.assertNotIn('FoodTrucksTest', self.core_builds()[-1])
+
+    def test_a_failed_default_restore_fails_the_build_and_unstages_the_test_core(self):
+        self.notice.write_bytes(NOTICE)
+        for flag in ('--test-faults', '--test-contract-2'):
+            with self.subTest(flag=flag):
+                result = self.run_build(flag, HARNESS_DEFAULT_CORE_FAIL='1')
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn('Could not restore the default FoodTrucks.Core.dll', result.stderr)
+                self.assertFalse((self.deps / 'FoodTrucks.Core.dll').exists())
 
     def test_a_default_build_after_a_test_build_packages_the_default_core(self):
         self.notice.write_bytes(NOTICE)
