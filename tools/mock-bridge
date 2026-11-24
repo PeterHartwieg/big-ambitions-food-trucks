@@ -624,7 +624,7 @@ class Mock:
         return {'item':line['key'],'name':line['item'],'price':line.get('set_price'),'done':True,'notices':[],'state':v}
 
     def route_command(self, args):
-        op=need(args,'op','add_stop or paste_day')
+        op=need(args,'op','add_stop, paste_day or edit_stop')
         v=self.vehicle(need(args,'vehicle',"the food vehicle's id"))
         if not self.mod_loaded: raise ValueError("The mod's save data isn't loaded.")
         if not self.can_write: raise ValueError("The mod's save data is read-only.")
@@ -689,7 +689,75 @@ class Mock:
             v['route']=self.plan_route(v)
             self.event(f"Test bridge: route paste_day {v['id']}: {source} onto {', '.join(targets)}: None.")
             return {'done':True,'problem':None,'notices':[],'state':next(x for x in self.read_state()['vehicles'] if x['id']==v['id'])}
-        raise ValueError(f"Unknown route op '{op}': add_stop, paste_day.")
+        if op=='edit_stop':
+            return self.edit_stop(v,stops,args,days,start)
+        raise ValueError(f"Unknown route op '{op}': add_stop, paste_day, edit_stop.")
+
+    def edit_stop(self, v, stops, args, days, start):
+        def whole(key):
+            value=args.get(key)
+            if value is None: return None
+            if isinstance(value,bool) or not isinstance(value,(int,float)) or value!=int(value) or value<0: raise ValueError(f'"{key}" is a whole number from 0.')
+            return int(value)
+        def clock(key):
+            text=args.get(key)
+            if text is None: return None
+            try: return minute(str(text))
+            except ValueError: raise ValueError(f'"{key}" must be "HH:MM".')
+        def counted(n): return 'no stops' if n==0 else '1 stop (0)' if n==1 else f'{n} stops (0 to {n-1})'
+        if not stops: raise ValueError(f"{v['id']} has no route to edit.")
+        index,stop=whole('index'),whole('stop')
+        day=None if args.get('day') is None else days(args.get('day'),'day',single=True)[0]
+        address=args.get('address')
+        near=None
+        if address is not None:
+            if not re.fullmatch(r'ba:street_[a-z0-9]+#[0-9]+',address):
+                raise ValueError(f'"address" is a building\'s address as the game writes it, ba:street_<name>#<number>; got \'{address}\'.')
+            building=next((b for b in CITY if b['key']==address),None)
+            if building is None: raise ValueError(f'no building at {address} in this city')
+            px,pz=round(building['x']+6.,2),round(building['z'],2)
+            near=lambda s: abs(s['x']-px)<=1.0 and abs(s['z']-pz)<=1.0
+        open_at,close_at=clock('open'),clock('close')
+        week=sorted(stops,key=lambda s:(WEEK.index(s['day']),s['open']))
+        if index is not None:
+            if day is not None or stop is not None or near is not None:
+                raise ValueError('Name the stop one way: "index" alone, or "day" with "stop" or "address".')
+            if index>=len(week): raise ValueError(f'No stop at index {index}: the week has {counted(len(week))}.')
+            picked=week[index]
+        elif day is None:
+            raise ValueError('"stop" and "address" need "day".' if stop is not None or near is not None else 'Name the stop: "index", or "day" with "stop" or "address".')
+        else:
+            if stop is not None and near is not None: raise ValueError('Give "stop" or "address", not both.')
+            if stop is None and near is None: raise ValueError('With "day", give "stop" or "address".')
+            todays=[s for s in week if s['day']==day]
+            if stop is not None:
+                if stop>=len(todays): raise ValueError(f'No stop {stop} on {day}: it has {counted(len(todays))}.')
+                picked=todays[stop]
+            else:
+                matches=[s for s in todays if near(s)]
+                if not matches: raise ValueError(f'No stop by that address on {day}.')
+                if len(matches)>1:
+                    raise ValueError(f'{len(matches)} stops by that address on {day} (week index {", ".join(str(week.index(s)) for s in matches)}); name one with "stop" or "index".')
+                picked=matches[0]
+        if open_at is None and close_at is None: raise ValueError('Give "open", "close" or both, as "HH:MM".')
+        o=picked['open'] if open_at is None else open_at
+        c=picked['close'] if close_at is None else close_at+1440 if close_at<=o else close_at
+        shift={0:0,1:1440,6:-1440}
+        others=[(s['open']+shift[d],s['close']+shift[d]) for s in stops if s is not picked
+                for d in [(WEEK.index(s['day'])-WEEK.index(picked['day']))%7] if d in shift]
+        problem=None if c>o and c<=27*60 else 'BadTimes'
+        if problem is None and any(a<c and o<b for a,b in others): problem='Overlap'
+        if problem is None:
+            picked['open'],picked['close']=o,c
+            v['route']=self.plan_route(v)
+        hhmm=lambda m: f'{m//60:02d}:{m%60:02d}'
+        at=sorted(stops,key=lambda s:(WEEK.index(s['day']),s['open'])).index(picked)
+        self.event(f"Test bridge: route edit_stop {v['id']}: stop {week.index(picked)} of the week to {hhmm(o)}-{hhmm(c)}: {problem or 'None'}" +
+                   (f", now index {at}." if problem is None else "."))
+        notices=[e['text'][8:] for e in self.ring if e['seq']>start and e['kind']=='notice']
+        return {'done':problem is None,'problem':problem,'vehicle':v['id'],'index':at,'day':picked['day'],
+                'open':hhmm(picked['open']),'close':hhmm(picked['close']),'notices':notices,
+                'state':next(x for x in self.read_state()['vehicles'] if x['id']==v['id'])}
 
     def plan_route(self, v, shifts=None):
         stops=self.plans.get(v['id'],[])

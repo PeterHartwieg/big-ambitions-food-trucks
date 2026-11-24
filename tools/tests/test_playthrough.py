@@ -284,6 +284,7 @@ class BridgeOpsParityTests(unittest.TestCase):
         self.mock = NAMESPACE['Mock'](self.folder.name)
         self.source = ''.join((TOOLS.parent / 'unity/FoodTrucks/Scripts' / name).read_text()
                               for name in ('TestBridgePlaythrough.cs', 'TestBridgeWorld.cs', 'TestBridgeState.cs'))
+        self.core = (TOOLS.parent / 'Core/Fleet/StopEdit.cs').read_text()
 
     def refused(self, cmd, args, text):
         with self.assertRaises(ValueError) as exc:
@@ -398,14 +399,85 @@ class BridgeOpsParityTests(unittest.TestCase):
         self.refused('route', {'op': 'add_stop', 'vehicle': v['id'], 'address': 'ba:street_thirdstreet#6', 'open': '11:00'},
                      'Give both "open" and "close", or neither for the default hours.')
         self.refused('route', {'op': 'paste_day', 'vehicle': v['id'], 'from': 'someday', 'to': 'all'}, "Unknown day 'someday': monday to sunday.")
-        self.refused('route', {'op': 'move', 'vehicle': v['id']}, "Unknown route op 'move': add_stop, paste_day.")
-        for text in ('Give both \\"open\\" and \\"close\\", or neither for the default hours.', "Unknown route op '{op}': add_stop, paste_day.",
+        self.refused('route', {'op': 'move', 'vehicle': v['id']}, "Unknown route op 'move': add_stop, paste_day, edit_stop.")
+        for text in ('Give both \\"open\\" and \\"close\\", or neither for the default hours.', "Unknown route op '{op}': add_stop, paste_day, edit_stop.",
                      "Unknown day '{name}': monday to sunday.", 'no building at {address} in this city'):
             self.assertIn(text, self.source)
         for key in ('done', 'address', 'x', 'z', 'heading', 'distance', 'days', 'added', 'stops', 'problem'):
             self.assertIn(f'["{key}"]', self.source)
         self.mock.state['save'] = 'Non-FT mock'
         with self.assertRaises(ValueError): self.mock.call('route', {'op': 'add_stop', 'vehicle': v['id'], 'address': 'ba:street_thirdstreet#6'})
+
+    def test_route_edit_stop_changes_the_hours_of_one_stop(self):
+        v = self.mock.spawn('cart')
+        self.mock.call('route', {'op': 'add_stop', 'vehicle': v['id'], 'address': 'ba:street_thirdstreet#6', 'days': ['monday', 'tuesday']})
+        self.mock.call('route', {'op': 'add_stop', 'vehicle': v['id'], 'address': 'ba:street_secondavenue#4', 'days': ['monday']})
+        reply = self.mock.call('route', {'op': 'edit_stop', 'vehicle': v['id'], 'index': 0, 'close': '13:00'})
+        self.assertEqual(set(reply), {'done', 'problem', 'vehicle', 'index', 'day', 'open', 'close', 'notices', 'state'})
+        self.assertEqual((reply['done'], reply['problem'], reply['index'], reply['day'], reply['open'], reply['close']),
+                         (True, None, 0, 'monday', '11:00', '13:00'))
+        self.assertEqual([(s['open'], s['close']) for s in reply['state']['route']['week'][0]['stops']], [('11:00', '13:00'), ('14:00', '17:00')])
+        by_stop = self.mock.call('route', {'op': 'edit_stop', 'vehicle': v['id'], 'day': 'monday', 'stop': 1, 'open': '15:00', 'close': '02:00'})
+        self.assertEqual((by_stop['index'], by_stop['open'], by_stop['close']), (1, '15:00', '26:00'))
+        by_address = self.mock.call('route', {'op': 'edit_stop', 'vehicle': v['id'], 'day': 'tuesday', 'address': 'ba:street_thirdstreet#6', 'open': '12:00'})
+        self.assertEqual((by_address['index'], by_address['day'], by_address['open'], by_address['close']), (2, 'tuesday', '12:00', '14:00'))
+        refused = self.mock.call('route', {'op': 'edit_stop', 'vehicle': v['id'], 'index': 1, 'open': '12:00'})
+        self.assertEqual((refused['done'], refused['problem'], refused['open'], refused['close']), (False, 'Overlap', '15:00', '26:00'))
+        for args, text in (
+                ({'index': 0, 'day': 'monday', 'close': '12:00'}, 'Name the stop one way: "index" alone, or "day" with "stop" or "address".'),
+                ({'day': 'monday', 'stop': 0, 'address': 'ba:street_thirdstreet#6', 'close': '12:00'}, 'Give "stop" or "address", not both.'),
+                ({'close': '12:00'}, 'Name the stop: "index", or "day" with "stop" or "address".'),
+                ({'stop': 0, 'close': '12:00'}, '"stop" and "address" need "day".'),
+                ({'day': 'monday', 'close': '12:00'}, 'With "day", give "stop" or "address".'),
+                ({'index': 3, 'close': '12:00'}, 'No stop at index 3: the week has 3 stops (0 to 2).'),
+                ({'day': 'sunday', 'stop': 0, 'close': '12:00'}, 'No stop 0 on sunday: it has no stops.'),
+                ({'day': 'monday', 'address': 'ba:street_firstavenue#1', 'close': '12:00'}, 'No stop by that address on monday.'),
+                ({'index': 0}, 'Give "open", "close" or both, as "HH:MM".'),
+                ({'index': 1.5, 'close': '12:00'}, '"index" is a whole number from 0.'),
+                ({'index': 0, 'close': '25:00'}, '"close" must be "HH:MM".')):
+            with self.subTest(args=args):
+                self.refused('route', {'op': 'edit_stop', 'vehicle': v['id'], **args}, text)
+        for text in ('Name the stop one way: \\"index\\" alone, or \\"day\\" with \\"stop\\" or \\"address\\".',
+                     'Give \\"stop\\" or \\"address\\", not both.', 'With \\"day\\", give \\"stop\\" or \\"address\\".',
+                     'No stop at index {index.Value}: the week has {Counted(stops.Count)}.', 'No stop by that address on {name}.',
+                     'Give \\"open\\", \\"close\\" or both, as \\"HH:MM\\".', '{id} has no route to edit.',
+                     '\\"{key}\\" is a whole number from 0.'):
+            self.assertIn(text, self.source + self.core)
+        for key in ('vehicle', 'index', 'day', 'open', 'close', 'problem'):
+            self.assertIn(f'["{key}"]', self.source)
+        for call in ('StopEdit.Pick(', 'StopEdit.Apply(new HireSchedules(rules.Fleet)', 'StopEdit.MustClose(', 'CartSelling.CloseByCrew(vehicle, now)',
+                     'RouteStops.Changed(vehicle)'):
+            self.assertIn(call, self.source)
+
+    def test_route_edit_stop_refuses_a_missing_or_unknown_vehicle(self):
+        v = self.mock.spawn('cart')
+        self.mock.call('route', {'op': 'add_stop', 'vehicle': v['id'], 'address': 'ba:street_thirdstreet#6', 'days': ['monday']})
+        self.refused('route', {'op': 'edit_stop', 'index': 0, 'close': '13:00'}, 'Missing "vehicle": the food vehicle\'s id.')
+        self.refused('route', {'op': 'edit_stop', 'vehicle': 'nope', 'index': 0, 'close': '13:00'}, f"No food cart or truck with id 'nope'. Food vehicles: {v['id']}.")
+        self.assertIn('var id = Need(args, "vehicle", "the food vehicle\'s id");\n            var instance = FoodVehicle(id);', self.source)
+        self.assertIn("No food cart or truck with id '{id}'.", self.source)
+
+    def test_route_edit_stop_by_address_names_only_the_stop_at_that_buildings_pitch(self):
+        v = self.mock.spawn('cart')
+        self.mock.call('route', {'op': 'add_stop', 'vehicle': v['id'], 'address': 'ba:street_broadwaystreet#1', 'days': ['monday']})
+        self.refused('route', {'op': 'edit_stop', 'vehicle': v['id'], 'day': 'monday', 'address': 'ba:street_broadwaystreet#2', 'close': '13:00'},
+                     'No stop by that address on monday.')
+        reply = self.mock.call('route', {'op': 'edit_stop', 'vehicle': v['id'], 'day': 'monday', 'address': 'ba:street_broadwaystreet#1', 'close': '13:00'})
+        self.assertEqual((reply['done'], reply['close']), (True, '13:00'))
+        for call in ('StopPicker.Snap(kind, doors[0]', 'StopEdit.AtSpot(spot.Position.x, spot.Position.z)'):
+            self.assertIn(call, self.source)
+
+    def test_route_edit_stop_refuses_an_overnight_close_into_the_next_days_stop(self):
+        v = self.mock.spawn('cart')
+        for day, open_at, close_at in (('monday', '20:00', '23:00'), ('tuesday', '01:00', '03:00'), ('sunday', '20:00', '23:00')):
+            self.mock.call('route', {'op': 'add_stop', 'vehicle': v['id'], 'address': 'ba:street_thirdstreet#6', 'days': [day], 'open': open_at, 'close': close_at})
+        self.mock.call('route', {'op': 'add_stop', 'vehicle': v['id'], 'address': 'ba:street_thirdstreet#6', 'days': ['monday'], 'open': '00:30', 'close': '02:00'})
+        for day, close_at in (('monday', '02:00'), ('sunday', '01:00')):
+            with self.subTest(day=day):
+                refused = self.mock.call('route', {'op': 'edit_stop', 'vehicle': v['id'], 'day': day, 'stop': 1 if day == 'monday' else 0, 'close': close_at})
+                self.assertEqual((refused['done'], refused['problem'], refused['open'], refused['close']), (False, 'Overlap', '20:00', '23:00'))
+        fits = self.mock.call('route', {'op': 'edit_stop', 'vehicle': v['id'], 'day': 'monday', 'stop': 1, 'close': '00:30'})
+        self.assertEqual((fits['done'], fits['close']), (True, '24:30'))
 
     def test_a_route_to_do_names_the_days_with_nobody_on_shift(self):
         v = self.mock.spawn('cart')
