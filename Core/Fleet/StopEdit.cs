@@ -87,8 +87,16 @@ namespace FoodTrucks.Core.Fleet
             }
             if (served.StopIndex != index)
             {
-                if (plan.Legs.Any(l => l.StopIndex == index && l.End > now)) vehicle.Shifts.RemoveAll(p => p.Day == day - 1);
-                return;
+                if (plan.Legs.Any(l => l.StopIndex == index && l.End > now))
+                {
+                    vehicle.Shifts.RemoveAll(p => p.Day == day - 1);
+                    return;
+                }
+                index = served.StopIndex;
+                stop = vehicle.Schedule!.Stops.ElementAtOrDefault(index);
+                if (stop == null || stop.Day != WeekPlan.Previous(GameDays.Weekday(day))) return;
+                var fitted = HireSchedules.Absolute(day - 1, stop.CloseAt);
+                if (plan.Legs.Where(l => l.Kind == LegKind.Open && l.StopIndex == index).Max(l => l.End) == fitted) return;
             }
             var from = served.Start;
             var close = HireSchedules.Absolute(day - 1, stop.CloseAt);

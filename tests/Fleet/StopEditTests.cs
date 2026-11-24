@@ -431,6 +431,34 @@ public class StopEditTests
     }
 
     [Fact]
+    public void EditingAnEarlierStopFromYesterdayKeepsTheLateStopServingThroughItsFittedClose()
+    {
+        var runner = new HireRunner(ShippedData.Rules.Fleet);
+        var cart = WeekTestData.AllDay(Cart(Stop(DayOfWeek.Monday, "park", 280, 18 * 60, 21 * 60 + 30), Stop(DayOfWeek.Monday, "bars", 400, 22 * 60, 24 * 60 + 40)));
+        var late = cart.Schedule!.Stops[1];
+        var bay = (X: 424.0, Z: 0.0);
+        var bars = new VehicleWhere(400, 0, leaveAlone: false, home: bay);
+        runner.EnsurePlan(cart, At(1, 18 * 60), 280, 0, home: bay);
+        cart.IsOpen = true;
+        cart.HireStop = 1;
+        var now = At(2, 15);
+        runner.EnsurePlan(cart, now, 400, 0, home: bay);
+
+        Assert.Equal(ScheduleProblem.None, StopEdit.Apply(schedules, cart, 0, 18 * 60, 22 * 60, out var moved));
+        RouteEditor.FitTravel(schedules, ShippedData.Rules.Fleet, cart.Schedule, TravelMode.Push, 1.0, 30, ShippedData.Rules.Fleet.LatestCloseMinute);
+        Assert.Equal((22 * 60 + 30, 25 * 60 + 10), (late.OpenAt, late.CloseAt));
+        HireRunner.Replan(cart, now);
+        StopEdit.RetimeYesterday(schedules, cart, moved, now, home: bay);
+        Assert.False(StopEdit.MustClose(cart, cart.HireStop!.Value, now));
+        runner.EnsurePlan(cart, now, 400, 0, home: bay);
+
+        Assert.Equal(HireActionKind.None, runner.Step(cart, now, bars).Kind);
+        Assert.Equal(HireActionKind.None, runner.Step(cart, At(2, 40), bars).Kind);
+        Assert.Equal(HireActionKind.None, runner.Step(cart, At(2, 69), bars).Kind);
+        Assert.Equal(HireActionKind.Close, runner.Step(cart, At(2, 70), bars).Kind);
+    }
+
+    [Fact]
     public void TheReplyClockKeepsHoursAfterMidnight()
     {
         Assert.Equal("09:05", StopEdit.Clock(9 * 60 + 5));
