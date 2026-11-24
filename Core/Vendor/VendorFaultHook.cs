@@ -77,8 +77,11 @@ namespace FoodTrucks
             switch (action)
             {
                 case "arm":
-                    Arm((string?)args["point"]);
-                    return new JObject { ["armed"] = true, ["point"] = Point, ["shots_remaining"] = ShotsRemaining };
+                    lock (gate)
+                    {
+                        Arm((string?)args["point"]);
+                        return new JObject { ["armed"] = true, ["point"] = point, ["shots_remaining"] = shots };
+                    }
                 case "status":
                     lock (gate)
                         return new JObject { ["armed"] = shots > 0, ["point"] = point, ["shots_remaining"] = shots, ["fired"] = fired };

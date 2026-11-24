@@ -55,7 +55,7 @@ Code comments are banned (see `AGENTS.md`). The comments listed here were kept b
 - `tools/balance/Program.cs:30-33` imperfect-choice
 - `tools/balance/Program.cs:708-720` imperfect-choice
 - `tools/balance/Program.cs:734-736` workaround
-- `tools/build-mod.sh:65-68` workaround
+- `tools/build-mod.sh:78-81` workaround
 - `tools/ftlib/playthrough.py:435-436` workaround
 - `tools/ftlib/shots.py:26` workaround
 - `tools/game-lock.sh:1-2` temporary

@@ -57,8 +57,21 @@ if [ ! -f "$DEPS/0Harmony.dll" ] || [ ! -f "$REPO/build/Harmony-LICENSE.txt" ]; 
 fi
 echo "$HARMONY_DLL_SHA256  $DEPS/0Harmony.dll" | shasum -a 256 -c - >/dev/null || { echo "Cached 0Harmony.dll does not match the pinned hash; delete it and rebuild" >&2; exit 1; }
 
-dotnet build "$REPO/Core/FoodTrucks.Core.csproj" -c Release -nologo -v quiet ${CORE_PROP:+"$CORE_PROP"}
-cp "$REPO/Core/bin/Release/netstandard2.1/FoodTrucks.Core.dll" "$DEPS/FoodTrucks.Core.dll"
+stage_core() {
+  dotnet build "$REPO/Core/FoodTrucks.Core.csproj" -c Release -nologo -v quiet "$@"
+  cp "$REPO/Core/bin/Release/netstandard2.1/FoodTrucks.Core.dll" "$DEPS/FoodTrucks.Core.dll"
+}
+restore_default_core() {
+  local rc=$?
+  trap - EXIT
+  if ! (set -e; stage_core); then
+    echo "Could not restore the default FoodTrucks.Core.dll in $DEPS; rebuild without a test flag before any other Unity build" >&2
+    rc=1
+  fi
+  exit "$rc"
+}
+[ -z "$VARIANT" ] || trap restore_default_core EXIT
+stage_core ${CORE_PROP:+"$CORE_PROP"}
 dotnet build "$REPO/tools/bridge-locks/BridgeControl.csproj" -c Release -nologo -v quiet
 cp "$REPO/tools/bridge-locks/bin/Release/netstandard2.0/BridgeControl.dll" "$DEPS/BridgeControl.dll"
 
