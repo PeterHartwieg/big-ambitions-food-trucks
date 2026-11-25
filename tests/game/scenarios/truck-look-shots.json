@@ -1,6 +1,6 @@
 {
   "name": "truck-look-shots",
-  "checks": "CHECKS.md, Truck hatch and art, cart and truck appearance (TA1 to TA4) and interior (TI1, TI2)",
+  "checks": "CHECKS.md, Truck hatch and art, cart and truck appearance (TA1 to TA4), interior (TI1) and the player-alone position in TI2; TI2 crew placement is checked by hand",
   "needs": {},
   "steps": [
     {
@@ -59,7 +59,7 @@
       "path": "vehicles[kind=cart].id"
     },
     {
-      "note": "Art look rows 1 to 3, 7 and 8 and Truck interior rows 1 and 3 are visual notes, not checked by mock images. No debug stock replaces the reference equipment prepared by the person."
+      "note": "TA1 to TA4, TI1 and the player-alone part of TI2 are visual notes, not checked by mock images. No debug stock replaces the reference equipment prepared by the person."
     },
     {
       "call": "time",

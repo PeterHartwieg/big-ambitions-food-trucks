@@ -254,7 +254,7 @@ The centred worker was checked on 2026-10-24 in the Windows `agent1` rig (game b
 | TA4 | Open the truck and stand at the hatch; look in from the pavement | The register on the serving counter at the cab end, facing the street; nobody stands in it | Pending |
 | TA5 | Buy a truck in a strong colour; view all four sides, hatch closed and open; walk back 30 m; hover the mouse over it | Body panels in the colour; teal bands, steel, glass, lights and kitchen keep their own colours; no tint bleed; the game's white hover outline | Pending |
 | TI1 | Park legally, hatch to the pavement, Open here; look in from 2-3 m; close the window | The window is clear; serving counter at the sill, the cooking line on the back wall under a hood; fitted pieces face the hatch; the closed hatch is flush | Pending |
-| TI2 | Stay at the hatch; then put three workers on the truck and step out | You stand at the middle of the window; with you two crew beside you and the third further back; after you step out three crew across the window; nobody inside the counter, sink or fridge | Pending |
+| TI2 | Stay at the hatch alone; then put two crew on shift; then step out | Alone, you stand at the middle of the window. With two crew on shift, you and one crew member serve at the hatch (the truck has two serving places and you take one) and the second crew member waits further back. After you step out, both crew stand at the hatch. Nobody stands inside the counter, sink or fridge | Pending |
 | CW1 | Open a cart with one employee on shift, queue on the right; walk round it | Employee behind the cart at the worktop midpoint facing customers; the first customer across from them | Checked 2026-10-24, agent1 |
 | CW2 | Repeat with the queue on the left | Register on the left front corner facing customers; employee on the right at the midpoint; log `Cart register: cart ... register on the left front corner` | Checked 2026-10-24, agent1 |
 | CW3 | Push the cart to about 0, 90, 180, 270 degrees and an odd angle; open each time | Same place relative to the cart every time, never diagonal | Pending |
@@ -296,7 +296,7 @@ The public contract and its own pending native list are in [docs/vendor-api.md](
 
 ## Release smoke
 
-Run on the exact final package before an upload, after the focused checks above. Patch lines come from the log check.
+Any release that changes in-game behaviour needs rig proof on its PR first (screenshots, logs or tests showing before and after). Run this smoke on the exact final package when it differs from the rig-tested build in more than the version bump and release copy, or when no PR in the release has rig proof. Skip it when the feature PR already has rig proof and the final package only bumps the version (Peter, 2026-11-01: no redundant package smoke); record the skip and the PR with the proof in the release PR. Patch lines come from the log check.
 
 | Check | Do | Look for | Evidence |
 | --- | --- | --- | --- |
