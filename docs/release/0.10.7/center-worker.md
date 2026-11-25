@@ -1,42 +1,43 @@
-# Street Food 0.10.7 — centred cart worker
+# Street Food 0.10.7: centred cart worker
 
-Employees, player stance and first customer share the midpoint of the two fitted worktop spots. The Unity adapter reads the actual fitted display anchors; Core computes their midpoint. With fewer than two fitted worktop pieces, service uses counter-local z=0. The dedicated below-counter fridge is excluded. Current anchors at z ±0.30 give z=0. The server remains 0.85 m across from the cart centre on the side away from customers, facing across the counter.
+Employees, the player's stance and the first customer share the midpoint of the two fitted worktop spots. The Unity adapter reads the fitted display anchors and Core computes their midpoint. With fewer than two fitted worktop pieces, service uses counter-local z=0. The dedicated below-counter fridge is excluded. The current anchors at z ±0.30 give z=0. The server stands 0.85 m from the cart centre on the side away from customers, facing across the counter.
 
-The register remains at (±0.29, 0.95, 0.615). Its existing corner mount leaves the working gap between appliances open. Operator-facing equipment yaw and worker-side fridge mounting remain as in the grill-facing fix. Food truck paths and geometry are unchanged. No version or save-schema change.
+The register stays at (±0.29, 0.95, 0.615) on its corner mount. Operator-facing equipment yaw and worker-side fridge mounting are unchanged from the earlier 0.10.7 grill-facing fix. Food truck paths and geometry are unchanged. No version or save-schema change.
 
-Crew placement caches follow changed equipment centres. A changed centre releases a held player stance and rebuilds the cart queue. Both customer and server pavement checks, road/parking/crosswalk exclusions, player reachability and bounded counter-side fallbacks remain. No end-of-cart service.
+Crew placement caches follow changed equipment centres. A changed centre releases a held player stance and rebuilds the cart queue. Customer and server pavement checks, road, parking and crosswalk exclusions, player reachability and bounded counter-side fallbacks all remain. There is no end-of-cart service.
 
-## Validation
+## Native results
 
-- `dotnet test FoodTrucks.sln`: **2,251 passed**, zero failed; one pre-existing opt-in 200-seed soak skipped.
-- `FT_TEST_TRANSPORT=inprocess python3 -m unittest discover -s tools/tests`: **254 passed**, final run 140.934 s; prior full run also passed. Actual crew, serving and queue adapters exercise asymmetric fitted spots, zero/one/two fitted items, dedicated-fridge exclusion, both sides/headings, equipment removal, pavement exclusions and unchanged trucks. Core/spec plus actual VehicleDisplays still cover all 18 prefab orientations × both sides × 360 headings (12,960 combinations).
-- Official Unity SDK build, Windows/Mac bundles, bundle validation and ordinary-release physical-probe exclusion gate: **PASS**. Archive CRC, exact 19-entry inventory and every byte against built package: **PASS**.
-- Native existing Windows agent1, build 3682, session **596be1fd**, 1920×1080 windowed. Steam disconnected and Workshop disabled, confirmed by live health. Disposable FT fixture only; no observer placement or yaw override.
+Windows rig agent1, game build 3682, session `596be1fd`, 1920x1080 windowed, 24 October 2026. Steam disconnected and Workshop disabled, confirmed by live health. Disposable fixture only, with no observer placement or yaw override.
 
-| Case | Queue side | Employee local (x,z) m | Player local z m¹ | First customer local z m¹ | Places | Result |
+| Case | Queue side | Employee local (x,z) m | Player local z m | First customer local z m | Places | Result |
 | --- | --- | --- | --- | --- | --- | --- |
 | kerb-edge90 | right | (-0.849999, -0.000004) | 0.000000 | -0.000000 | 6 | PASS |
 | CW1-right180 | right | (-0.849995, -0.000000) | 0.000000 | -0.000000 | 10 | PASS |
 | CW2-left37 | left | (0.849998, -0.000002) | 0.001930 | -0.002384 | 8 | PASS |
 
-¹ Player/customer coordinates are rounded to 0.01 m by bridge state; employee coordinates come from the live transform. All employee and player checks have safe pedestrian ground, no street rejection and correct customer-facing yaw. Right/180° has two occupied queue places and left/37° one; both include the real first customer. The first place is aligned with the working centre, independently of the register. Native machine close-ups verify HotDogRoller/BurgerStation controls and the dedicated fridge on the worker side, with mirrored register facing customers. Other models and zero/one-item fallbacks are covered offline, not claimed as separately photographed.
+The bridge rounds player and customer coordinates to 0.01 m. Employee coordinates come from the live transform. Every employee and player position is on safe pedestrian ground with no street rejection and the correct customer-facing yaw. Both sides are covered: right at 180° with two occupied queue places, left at 37° with one, and both include a real first customer. The first queue place lines up with the working centre, not the register. Native close-ups show the HotDogRoller and BurgerStation controls and the dedicated fridge on the worker side, with the register facing customers.
 
-The new centre at the 90° kerb edge itself passes pavement checks and allows six queue places. The former register-aligned stance at z=0.615 fell in the parking lane there. This is a changed target, not a relaxed safety rule.
+At the 90° kerb edge the new centre passes the pavement checks and allows six queue places. The old register-aligned stance at z=0.615 fell in the parking lane there. The target changed. The safety rule did not get looser.
 
-Log checker: 111 active patches, zero inactive patches/mod errors/FoodTrucks exceptions (always-on checks; no version-specific 0.10.7 rules). The retained fixture logs one GameManager NullReference during the **preparation midnight**, immediately following `internetcafe:itemname_pcsession` missing from ItemsDictionary; the stack contains GameManager, not a placement adapter. The preparation error’s cause was not diagnosed in this placement task. Native placement checks occur later in daylight without further exceptions. Existing native NavMesh spawn warnings remain. No broader overnight/foreign-mod compatibility pass is claimed.
+The log checker found 111 active patches and no inactive patches, mod errors or FoodTrucks exceptions. The fixture logged one GameManager NullReference during the preparation midnight, right after `internetcafe:itemname_pcsession` was missing from ItemsDictionary. Its stack has GameManager and no placement adapter. That cause was not diagnosed. The placement checks ran later in daylight without further exceptions. The existing native NavMesh spawn warnings remain. No broader overnight or foreign-mod compatibility pass is claimed.
 
-## Package and evidence
+## Offline coverage
 
-Implementation commit: `b19c36aa9224672cf4dad31cd90b399847c346db`, pushed normally on `codex/cart-worker-position` before native checks.
+Zero, one and two fitted items are covered offline only. They were not photographed separately in game, and neither were models other than the HotDogRoller and BurgerStation.
 
-ZIP: `/Users/peterhartwieg/Coding_Projects/big-ambitions/big-ambitions-food-trucks-worktrees/cart-worker-position/build/FoodTrucks-0.10.7-rc.zip`
+- `dotnet test FoodTrucks.sln`: 2,251 passed, none failed, one opt-in 200-seed soak skipped.
+- `FT_TEST_TRANSPORT=inprocess python3 -m unittest discover -s tools/tests`: 254 passed. The crew, serving and queue adapters run asymmetric fitted spots, zero, one and two fitted items, dedicated-fridge exclusion, both sides and headings, equipment removal, pavement exclusions and unchanged trucks.
+- Core and the real VehicleDisplays cover all 18 prefab orientations x both sides x 360 headings (12,960 combinations).
+- Official Unity SDK build, Windows and Mac bundles, bundle validation and the release physical-probe exclusion gate: PASS. Archive CRC, the 19-entry inventory and every byte against the built package: PASS.
 
-SHA-256: `6808acb91a3686a76f431f0cc5dbe40657739c44cd87833ae6263868e297fde6` (also in `.zip.sha256`). This exact ZIP was native-tested before the established bridge-port adaptation; all release bytes remain unchanged after testing. Release DLL SHA-256 `a382d3fbfc5ebb97b7001095d1b7943ef8aab94be0ee3f16f2b14ddeb6cbe472`; rig-adapted DLL `35907f01fcf9ced258d24d9e53ba98ccded715c2427851ad9f0b517b27622c56`.
+## Evidence identifiers
 
-All **30 unaltered native PNGs** have matching PC/local SHA-256 and 1920×1080 dimensions. Local screenshots: `/Users/peterhartwieg/Coding_Projects/big-ambitions/big-ambitions-food-trucks-worktrees/cart-worker-position/build/center-worker-0.10.7/screenshots`. Stable PC screenshots: `C:\Users\Peter\HART-Diagnostics\Performance\streetfood-107-center-20261024\screenshots`. `INDEX.md` identifies the elevated, worker-side and customer-side triplets for employee and player in all three layouts, and real-customer captures. Some player views include a foreground customer; the primary employee close-ups are clear.
+- Implementation commit `b19c36aa9224672cf4dad31cd90b399847c346db` on `codex/cart-worker-position`, pushed before the native checks.
+- Tested archive `FoodTrucks-0.10.7-rc.zip`, SHA-256 `6808acb91a3686a76f431f0cc5dbe40657739c44cd87833ae6263868e297fde6`. Release DLL SHA-256 `a382d3fbfc5ebb97b7001095d1b7943ef8aab94be0ee3f16f2b14ddeb6cbe472`. Rig-adapted DLL (bridge port only) `35907f01fcf9ced258d24d9e53ba98ccded715c2427851ad9f0b517b27622c56`. The release bytes were unchanged by testing.
+- 30 unaltered native PNGs at 1920x1080, with matching SHA-256 on the PC and locally. On the rig they are in `HART-Diagnostics\Performance\streetfood-107-center-20261024\screenshots`, with an `INDEX.md` naming the elevated, worker-side and customer-side views for employee and player in all three layouts. The same rig folder holds the profile backup and the tested profile.
+- Rig lease acquired at 2026-10-24T18:00:08.0482368Z with no game process running. All 4,667 profile files, preferences and the install receipt were restored and verified by SHA-256 at 2026-10-24T18:11:29.8833461Z. Final status at 18:12:34.7161926Z: no game process, lease released, no pending operations.
 
-Lease acquired only after no Big Ambitions processes at **2026-10-24T18:00:08.0482368Z**; all launches/check groups and subsequent test mutations rechecked normal-game absence. Fresh isolated-profile backup: 4,667 files, preferences and install receipt. Only AgentOverlay, test observer and candidate installed; other isolated mods parked and restored. Disposable fixture clock advanced to day 3 daylight and its crew scheduled through bridge; closed fixture truck moved 14 m to clear the camera. Normal game/profile/ModsLocal/saves/preferences/subscriptions and power policy untouched; no wake, main changes, force-push or Workshop upload.
+## Final-build limitation
 
-Restored at **2026-10-24T18:11:29.8833461Z**: all **4667** original profile files, preferences, install receipt and **107** referenced files verified by SHA-256. Final status **2026-10-24T18:12:34.7161926Z**: no game process, lease unheld, zero pending operations. Early installation was refused by the lifecycle guard while backup was still pending (no profile mutation); the daylight helper’s crew lookup was corrected from crew-name list to route.shifts before checks. All test helpers and original receipts/logs are retained.
-
-Full evidence/receipts: `/Users/peterhartwieg/Coding_Projects/big-ambitions/big-ambitions-food-trucks-worktrees/cart-worker-position/build/center-worker-0.10.7`. PC backup and retained tested profile: `C:\Users\Peter\HART-Diagnostics\Performance\streetfood-107-center-20261024`.
+This evidence is for the approved branch's archive above. The final 0.10.7 rebuild was not launched in game. Its gameplay code matches the approved package by normalized compiled comparison, as recorded in `release-verification.txt`, `build-equivalence.json` and `package-verification.json` in this folder.

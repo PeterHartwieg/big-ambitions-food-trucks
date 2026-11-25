@@ -2,15 +2,7 @@
 
 Start with a food cart and grow into a fleet of food trucks. Choose your equipment and menu, find customers around the city, work the serving window yourself or send a crew along a weekly route.
 
-**Version 0.10.12, 7 November 2026.** Each cart and truck can run its own marketing, picked on the vehicle's BizMan page: Flyers, Local ads or Citywide ads bring 10%, 20% or 30% more passers for $20, $45 or $80 a day on a cart and $60, $140 or $240 on a truck. A level starts the next day and its fee is charged at midnight; if the fee can't be paid, the marketing turns off and a notice says so. Automated checks pass; in-game checks MK1–MK7 passed on the test rig ([scope and checks](docs/release/0.10.12/scope.md)).
-
-**Included from 0.10.11:** A crew member can't be given more than the daily shift limit on a vehicle's Schedule tab. A change over the limit isn't saved, and a notice says so. Automated checks pass; in-game checks are pending ([scope and checks](docs/release/0.10.11/shift-cap-native-edits.md)).
-
-**Included from 0.10.10:** Commissary contacts and BizMan show the building's address with View on map and Set destination; welcome, rental and call texts name the street too. Safe uninstall also finds and refunds trucks and carts left with the private driver. Pasting a Schedule day keeps each day's route opening hours. Quitting while serving at a cart or truck window no longer logs a stock-panel error. Automated checks pass; the combined package was not smoke-tested in game.
-
-**Included from 0.10.9:** Food cart and truck crew show their vehicle and the job "Street food crew" in the game's employee list, its assigned filter and the employee details, instead of "Unassigned" and "No task". Manage schedule for a crew member opens their vehicle's page. Training and sick-day labels and every other employee are unchanged. Display only: crew stay unassigned in the game's own rules. Automated checks and pending in-game checks: [crew employee screen](docs/release/0.10.9/crew-employee-screen.md).
-
-**Included from 0.10.8:** Event and catering addresses use the game's own building address and street names. City events include GPS directions by phone, including fully booked events. Existing map filters highlight the event/catering building. Older city messages are repaired only for events that have not ended yet. Unavailable catering locations cancel without a reputation penalty; unavailable city locations refund unused bookings. Automated checks and native acceptance status: [event address fix](docs/release/0.10.8/event-address.md).
+**Version 0.10.12, 7 November 2026.** Each cart and truck can run its own marketing, picked on the vehicle's BizMan page: Flyers, Local ads or Citywide ads bring 10%, 20% or 30% more passers for $20, $45 or $80 a day on a cart and $60, $140 or $240 on a truck. A level starts the next day and its fee is charged at midnight; if the fee can't be paid, the marketing turns off and a notice says so. Earlier 0.10.x releases added the daily shift limit on the Schedule tab, commissary and event addresses with map and GPS actions, the "Street food crew" job in the employee list, safe uninstall for vehicles left with the private driver, truck logos, the dedicated drinks fridge and selling a cart at a commissary. The [evidence table](#evidence) below says which of these were seen in game.
 
 Bugs and balance changes are still possible. We recommend a new save or a backup of your existing save before enabling the mod. Read the removal instructions before unsubscribing.
 
@@ -18,7 +10,7 @@ Bugs and balance changes are still possible. We recommend a new save or a backup
 
 Take Food Safety, buy your vendor licence and get your first cart from General US Trucks. Fit two pieces of equipment plus an optional dedicated drinks fridge, load matching food and work a legal pavement pitch. Learn when and where your menu sells, then save for a truck with four equipment slots plus its own drinks-fridge place, more storage per piece and room for two people working at once.
 
-To retire a cart, close it, park it in a commissary bay and let go. Click it on foot and choose **Sell cart**. The confirmation quotes the cart and its onboard equipment and stock at the game's normal resale prices. Selling ends that cart's business and rental; crew become unassigned, with earned wages retained. Shared commissary stock and orders stay with you. **Checked on the Mac test rig:** stocked/empty sales, cancellation, crew/rental release and save/reload. A focused Windows sale/cancel/reload smoke also passed on 0.10.5 ([evidence](docs/release/0.10.5/followup-2026-10-23.md)).
+To retire a cart, close it, park it in a commissary bay and let go. Click it on foot and choose **Sell cart**. The confirmation quotes the cart and its onboard equipment and stock at the game's normal resale prices. Selling ends that cart's business and rental; crew become unassigned, with earned wages retained. Shared commissary stock and orders stay with you.
 
 Recruit staff through the recruitment agency after Basic HR, set their shifts and plan weekday routes in BizMan. Grow into several vehicles supplied through commissaries, standing orders and warehouse logistics.
 
@@ -82,26 +74,27 @@ Created by Peter Hartwieg. Uses the official Hovgaard Games modding SDK and Harm
 
 ## Development
 
-**Included since 0.10.6:** truck logos reuse the normal shop editor, including imported PNGs, text, fonts and colours. Each truck saves its own design and displays it on both fixed side panels. Native Mac checks cover editing, save/restart/reload, removal and body views with the serving hatch open and closed; see the [original verification evidence](docs/evidence/2026-10-22-truck-logos.md) and [final 0.10.6 validation](docs/release/0.10.6/final-verification.txt) for later checks and remaining limits.
-
-**Included since 0.10.6:** carts fit two general pieces plus one drinks fridge; trucks fit four plus one. The dedicated cart fridge sits below the counter on the worker side in 0.10.7; the truck fridge retains its customer-facing position at the rear of the serving counter. Further fridges still use general slots. Compared with 0.10.5, soda capacity doubles to 80/160 cans per fridge before Extra Storage, and standalone soda demand increases. Prices and the Extra Storage multiplier stay unchanged. The original [Mac fitting, stock, sales and reload checks](docs/evidence/2026-10-22-dedicated-cooler.md) are supplemented by the [final 0.10.6 validation](docs/release/0.10.6/final-verification.txt) and [0.10.7 cart-facing checks](docs/release/0.10.7/center-worker.md).
-
-**Released in 0.10.3:** water has been removed from the street-food menu and commissary catalogue. It is a factory ingredient; the cooler serves soda only. Existing saved stock is retained. Core checks cover the removal.
-
-The 0.10.6 baseline validation and remaining manual checks are in [the release evidence](docs/release/0.10.6/final-verification.txt). Peter accepted functionality and save safety following playtests on 18 October 2026. Release preparation focuses on packaging, presentation and community testing; the Workshop upload status is recorded in `docs/release/0.10.0/README.md` in the repository.
-
-Build with the .NET SDK, Unity 2022.3.62f2 and the official Big Ambitions SDK: `dotnet test`, then `tools/build-mod.sh` (add `--generate` when regenerating assets). Package the release candidate with `python3 tools/package-release.py --output build/FoodTrucks-0.10.12-rc.zip`. The build runs the release verifier; repeat it with `dotnet run --project tools/release/VerifyRelease.csproj -c Release -- build/FoodTrucks unity/FoodTrucks/ModManifest.asset`. The player-facing change note is in `workshop/CHANGENOTE-0.10.12.md`; checks and native-test status are recorded in `docs/release/0.10.12/scope.md`. Rename the candidate archive before a final Workshop release.
+Build with the .NET SDK, Unity 2022.3.62f2 and the official Big Ambitions SDK: `dotnet test`, then `tools/build-mod.sh`. Package the release candidate with `python3 tools/package-release.py --output build/FoodTrucks-0.10.12-rc.zip` and rename it before a final Workshop release. The player-facing change note is `workshop/CHANGENOTE-0.10.12.md`. Contributor rules and release steps are in [AGENTS.md](https://github.com/PeterHartwieg/big-ambitions-food-trucks/blob/main/AGENTS.md); decisions are in [docs/design.md](https://github.com/PeterHartwieg/big-ambitions-food-trucks/blob/main/docs/design.md).
 
 A supplied local package installs as a complete `FoodTrucks` folder in `ModsLocal`, with the game closed. The DLL or source checkout alone is not installable. Open the folder through **Mods → Mod Creator → Browse mod folder**.
 
-**Not released yet:** a versioned vendor API lets another mod bring its own customers to crew-run carts and trucks; Street Food keeps selling, booking and paying. It is inert without such a mod: saves and customers stay as before. Core checks pass; the Unity build and in-game checks are pending ([contract and status](docs/vendor-api.md)).
+Developer actions and the test bridge require `-foodtrucks-test`; normal players do not need it. Safe uninstall remains available without that option. The development key and command reference is [docs/test-bridge.md](https://github.com/PeterHartwieg/big-ambitions-food-trucks/blob/main/docs/test-bridge.md).
 
-Developer actions and the test bridge require `-foodtrucks-test`; normal players do not need it. Safe uninstall remains available without that option. The full development key/command reference is in `docs/test-bridge.md`.
-
-Historical build-specific checked, pending and unverified observations are preserved in `docs/evidence/readme-history-before-0.10.0.md`. They are not the current release acceptance checklist. The technical design and development history remain in `docs/design.md` and `docs/implementation-plan.md`.
+**Not released yet:** a versioned vendor API lets another mod bring its own customers to crew-run carts and trucks; Street Food keeps selling, booking and paying. It is inert without such a mod: saves and customers stay as before. Core checks pass; the Unity build and in-game checks are pending ([contract and status](https://github.com/PeterHartwieg/big-ambitions-food-trucks/blob/main/docs/vendor-api.md)).
 
 MIT, see `LICENSE.txt`. The truck uses the SDK example's physics setup and dirt textures. Harmony's notice is included in `Dependencies/Harmony-LICENSE.txt`.
 
-## Previous release verification
+## Evidence
 
-Unlimited rosters retain the [0.10.4 native checks](docs/release/0.10.4/verification.md). Cart closure retains the [0.10.5 checks](docs/release/0.10.5/verification.md), including pending deliveries, standing orders and earned payroll. Scheduled crews use timed offscreen travel.
+Checked means seen in game on the named rig and date. Pending means not yet run in game. Unverified means the build was not launched in game. Full rows and scope: [CHECKS.md](https://github.com/PeterHartwieg/big-ambitions-food-trucks/blob/main/CHECKS.md).
+
+| Feature | Status | Scope |
+|---|---|---|
+| Vehicle marketing (0.10.12) | Checked | MK1–MK7 on the Windows test rig, 7 November 2026; the bumped 0.10.12 package itself was not relaunched ([details](https://github.com/PeterHartwieg/big-ambitions-food-trucks/blob/main/CHECKS.md#vehicle-marketing)) |
+| Daily shift limit (0.10.11) | Pending | Automated checks only; the combined 0.10.11 package is unverified ([details](https://github.com/PeterHartwieg/big-ambitions-food-trucks/blob/main/CHECKS.md#daily-shift-limit)) |
+| Commissary addresses (0.10.10) | Checked | Five addresses, cards, GPS and calls on the Windows rig, 28 October 2026; the combined 0.10.10 package is unverified ([details](https://github.com/PeterHartwieg/big-ambitions-food-trucks/blob/main/CHECKS.md#commissary-addresses)) |
+| Crew employee screen (0.10.9) | Pending | Automated checks only ([details](https://github.com/PeterHartwieg/big-ambitions-food-trucks/blob/main/CHECKS.md#crew-employee-screen)) |
+| Event and catering addresses (0.10.8) | Partly checked | Focused Windows passes on 25 October 2026; some legacy cases pending ([details](https://github.com/PeterHartwieg/big-ambitions-food-trucks/blob/main/CHECKS.md#event-and-catering-addresses)) |
+| Truck logos and drinks fridge (0.10.6, 0.10.7) | Checked on Mac | Editing, reload, removal and fridge stock; rendered shop and wider lifecycle checks pending ([details](https://github.com/PeterHartwieg/big-ambitions-food-trucks/blob/main/CHECKS.md#truck-logos-and-cooler)) |
+| Cart sale and unlimited rosters (0.10.4, 0.10.5) | Checked | Mac stocked sale, cancel, payroll and reload; Windows empty-cart sale, cancel and reload, 23 October 2026 ([details](https://github.com/PeterHartwieg/big-ambitions-food-trucks/blob/main/CHECKS.md#cart-sale-and-rosters)) |
+| Vendor API v1 | Pending | In source, not in a released package; in-game checks pending ([details](https://github.com/PeterHartwieg/big-ambitions-food-trucks/blob/main/CHECKS.md#vendor-api-v1)) |

@@ -1,6 +1,6 @@
 {
   "name": "truck-look-shots",
-  "checks": "CHECKS.md, Art look, rows 1 to 3, 7 and 8; Truck interior (0.9.8), rows 1 and 3",
+  "checks": "CHECKS.md, Truck hatch and art, cart and truck appearance (TA1 to TA4) and interior (TI1, TI2)",
   "needs": {},
   "steps": [
     {

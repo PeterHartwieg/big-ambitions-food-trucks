@@ -5,7 +5,7 @@
   "_passersPerHour": "Passers per hour at footfall 1.0, before the menu's appetite. Calibration knob for the whole model.",
   "passersPerHour": 16,
 
-  "_streetBaseline": "Ordinary street traffic, added to independent area crowds. Lunch 1.0 keeps any pavement alive at midday. With passersPerHour 16, two offices at 20 and 40 m plus a nightclub at 30 m give about 65 passers/hour at a Midtown lunch (docs/balance/cart-economics.md, section 6). Night stays low. All neighbourhood, month, rain and promotion factors still apply. First values pending balance recalibration and an in-game check.",
+  "_streetBaseline": "Ordinary street traffic, added to independent area crowds. Lunch 1.0 keeps any pavement alive at midday. With passersPerHour 16, two offices at 20 and 40 m plus a nightclub at 30 m give about 65 passers/hour at a Midtown lunch (docs/balance/cart-economics.md#additive-crowds). Night stays low. All neighbourhood, month, rain and promotion factors still apply. First values pending balance recalibration and an in-game check.",
   "streetBaseline": { "early": 0.3, "morning": 0.5, "lunch": 1.0, "afternoon": 0.5, "evening": 0.3, "late": 0.08, "night": 0.03 },
 
   "_dayparts": "Start time of each daypart. Late runs past midnight; night (02 to 05) is the dead hours the design leaves out.",
@@ -88,7 +88,7 @@
       "addOnFactor": 2.0,
       "marketFloor": 0.7
     },
-    "_streetmeal": "Kabobs and dumplings: a plated street meal. Lunch-led like fast food, below it, with a steady evening and late trade (halal night carts). Offices x1.2. docs/balance/new-foods.md.",
+    "_streetmeal": "Kabobs and dumplings: a plated street meal. Lunch-led like fast food, below it, with a steady evening and late trade (halal night carts). Offices x1.2. docs/design.md.",
     "streetmeal": {
       "appetite": { "early": 0.02, "morning": 0.03, "lunch": 0.18, "afternoon": 0.05, "evening": 0.11, "late": 0.11, "night": 0.12 }
     },

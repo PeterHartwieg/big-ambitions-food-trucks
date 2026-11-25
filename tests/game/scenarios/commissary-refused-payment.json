@@ -1,6 +1,6 @@
 {
   "name": "commissary-refused-payment",
-  "checks": "CHECKS.md, Commissary look and payment (0.9.10), row 3",
+  "checks": "CHECKS.md, Commissary delivery and settlement, delivery refusal (CO3)",
   "needs": {},
   "steps": [
     {

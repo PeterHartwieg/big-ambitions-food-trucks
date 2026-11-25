@@ -1,10 +1,13 @@
-"""Writes prompt.md and spec.json for each counter equipment piece and food product.
+"""Writes spec.json for each counter equipment piece and food product, and prints a prop's Sol prompt.
 
-Run from the repo root: python3 art/tools/make_prop_prompts.py
-Each prop gets its own folder under art/equipment/ or art/products/, built by one Sol run.
+Run from the repo root: python3 art/tools/make_prop_prompts.py writes every spec.json.
+python3 art/tools/make_prop_prompts.py --prompt art/equipment/Griddle prints that prop's prompt to stdout
+without writing anything. Each prop gets its own folder under art/equipment/ or art/products/, built by one
+Sol run (art/tools/run_sol_prop.sh).
 """
 import json
 import os
+import sys
 
 EQUIPMENT = {
     "CoffeeStation": ("Compact coffee station", 0.55,
@@ -180,15 +183,16 @@ def snake(name):
     return "".join("_" + c.lower() if c.isupper() else c for c in name).lstrip("_")
 
 
+def render(name, prefix, label, desc, kind, hx, hy, h, body_tris, col_tris, tex, role, size_note):
+    article = "an" if label[0].lower() in "aeiou" else "a"
+    return PROMPT.format(article=article, label_lower=label.lower(), role=role, desc=desc, kind=kind,
+                         hx=f"{hx:.2f}", hy=f"{hy:.2f}", h=f"{h:.2f}", size_note=size_note, prefix=prefix,
+                         body_tris=f"{body_tris:,}", col_tris=col_tris, name=name, tex=tex,
+                         export=EXPORT.format(name=name), snake=snake(name))
+
+
 def write(folder, name, prefix, label, desc, kind, hx, hy, h, body_tris, col_tris, tex, role, size_note):
     os.makedirs(os.path.join(folder, "renders"), exist_ok=True)
-    article = "an" if label[0].lower() in "aeiou" else "a"
-    prompt = PROMPT.format(article=article, label_lower=label.lower(), role=role, desc=desc, kind=kind,
-                           hx=f"{hx:.2f}", hy=f"{hy:.2f}", h=f"{h:.2f}", size_note=size_note, prefix=prefix,
-                           body_tris=f"{body_tris:,}", col_tris=col_tris, name=name, tex=tex,
-                           export=EXPORT.format(name=name), snake=snake(name))
-    with open(os.path.join(folder, "prompt.md"), "w") as f:
-        f.write(prompt)
     spec = {
         "name": name,
         "fbx": f"{name}.fbx",
@@ -210,22 +214,41 @@ def write(folder, name, prefix, label, desc, kind, hx, hy, h, body_tris, col_tri
         f.write("\n")
 
 
-def main():
+EQUIPMENT_ROLE = ("It is a piece of equipment that stands on a food cart's counter (in one of two slots) or on the "
+                  "truck's counter behind its serving hatch, and the player can also buy it in a shop and carry it. "
+                  "Customers see it from the street, a few metres away, so it must say at a glance what the vendor sells.")
+EQUIPMENT_SIZE = ("The cart's counter is small; stay inside this footprint so any piece fits any slot. Use most of it: "
+                  "the piece should look full-size for a cart, not like a toy.")
+PRODUCT_ROLE = ("It is a food item the vendor sells over the counter; the game shows it in a customer's hand, on "
+                "shelves and as the picture of a stock box, so it must read clearly at small size.")
+PRODUCT_SIZE = "A hand-held portion: about the size of a real one."
+
+
+def props():
     for name, (label, h, desc) in EQUIPMENT.items():
-        write(os.path.join("art", "equipment", name), name, name, label, desc, "equipment",
-              0.20, 0.18, h, 1500, 60, 512,
-              "It is a piece of equipment that stands on a food cart's counter (in one of two slots) or on the "
-              "truck's counter behind its serving hatch, and the player can also buy it in a shop and carry it. "
-              "Customers see it from the street, a few metres away, so it must say at a glance what the vendor sells.",
-              "The cart's counter is small; stay inside this footprint so any piece fits any slot. Use most of it: "
-              "the piece should look full-size for a cart, not like a toy.")
+        yield (os.path.join("art", "equipment", name),
+               (name, name, label, desc, "equipment", 0.20, 0.18, h, 1500, 60, 512, EQUIPMENT_ROLE, EQUIPMENT_SIZE))
     for name, (label, desc) in PRODUCTS.items():
-        write(os.path.join("art", "products", name), name, name, label, desc, "item",
-              0.13, 0.13, 0.15, 600, 40, 256,
-              "It is a food item the vendor sells over the counter; the game shows it in a customer's hand, on "
-              "shelves and as the picture of a stock box, so it must read clearly at small size.",
-              "A hand-held portion: about the size of a real one.")
+        yield (os.path.join("art", "products", name),
+               (name, name, label, desc, "item", 0.13, 0.13, 0.15, 600, 40, 256, PRODUCT_ROLE, PRODUCT_SIZE))
+
+
+def main(argv):
+    if len(argv) == 2 and argv[0] == "--prompt":
+        wanted = os.path.normpath(argv[1])
+        for folder, args in props():
+            if os.path.normpath(folder) == wanted:
+                sys.stdout.write(render(*args))
+                return 0
+        sys.stderr.write(f"unknown prop folder {argv[1]}\n")
+        return 2
+    if argv:
+        sys.stderr.write("usage: make_prop_prompts.py [--prompt art/equipment/<Name>|art/products/<Name>]\n")
+        return 2
+    for folder, args in props():
+        write(folder, *args)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main(sys.argv[1:]))

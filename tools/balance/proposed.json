@@ -1,5 +1,5 @@
 {
-  "_notes": "The third pass's data patch (docs/balance/cart-economics.md, section 4), kept for reference. The fourth pass (section 6) edits data/demand.json directly for the additive crowd model; applying this patch on top would bring back third-pass values (passersPerHour 22, venue weights 6 to 10, the old nightlife and coffee curves). Run without --patch for the current data.",
+  "_notes": "The historical third-pass patch, kept for reference. The fourth pass (docs/balance/cart-economics.md#additive-crowds) edits data/demand.json directly for the additive crowd model; applying this patch on top would bring back third-pass values (passersPerHour 22, venue weights 6 to 10, the old nightlife and coffee curves). Run without --patch for the current data.",
   "demand": {
     "passersPerHour": 22,
     "areas": {

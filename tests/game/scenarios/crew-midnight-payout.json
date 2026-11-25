@@ -1,6 +1,6 @@
 {
   "name": "crew-midnight-payout",
-  "checks": "CHECKS.md, Commissary look and payment (0.9.10), rows 14 and 16",
+  "checks": "CHECKS.md, Commissary delivery and settlement, midnight payout (CO4, CO5)",
   "needs": {},
   "steps": [
     {

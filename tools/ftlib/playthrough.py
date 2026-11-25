@@ -1,4 +1,4 @@
-"""The AI playthrough runner (docs/ai-playtest-plan.md): Phase A's setup from a plan file, the day loop, the daily
+"""The AI playthrough runner (docs/test-bridge.md#playthrough-runner): Phase A's setup from a plan file, the day loop, the daily
 ledger and the checks that stop a run at the first broken rule.
 
 The checks are pure functions over snapshots (one per stop of the clock), so `check` can run them again offline from

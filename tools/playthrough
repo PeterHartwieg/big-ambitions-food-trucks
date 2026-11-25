@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The AI playthrough runner (docs/ai-playtest-plan.md, Phase A): set up from a plan file, run whole days, check, report.
+"""The AI playthrough runner (docs/test-bridge.md#playthrough-runner, Phase A): set up from a plan file, run whole days, check, report.
 
   tools/playthrough setup tests/game/playthrough/phase-a.json --run phase-a-1
   tools/playthrough run --run phase-a-1 --days 6

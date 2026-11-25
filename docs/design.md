@@ -1,425 +1,163 @@
-# Food truck mod: design
-
-Cart-sale release 0.10.5: commissary closure, resale, crew/payroll, routes, retained stock/deliveries and reload evidence are recorded in `docs/release/0.10.5/verification.md`. Venue/pitch native coverage and Windows gameplay remain unverified.
-
-Working title "Food Trucks". A public Workshop mod for Big Ambitions that adds street food as an early-game business: a cart first, then a truck, driven to legal spots around the city and worked at the window.
-
-Written 7 October 2026. Background research: [nyc-food-trucks-2026-10-07.md](research/nyc-food-trucks-2026-10-07.md). Nothing here has been built or tested in the game. Code facts come from the 1.0 build of 23 September 2026; see [Technical answers](#technical-answers).
-
-## Decisions so far
-
-**Truck branding (22 October 2026):** each truck may have its own logo, edited from its BizMan page using the normal shop logo controls (built-in/custom PNG shape, font, shape/text/background colours). Logo text is independent of the fleet's numbered vehicle name. Two 55 cm square signs sit on fixed body panels: below the customer serving window and above the driver-side generator hatch. Opening the serving hatch leaves them visible. Existing trucks start unbranded; removing a logo restores the plain body. Designs are optional versioned cosmetic save data; imported PNGs use the game's shared CustomIcons folder. Carts and business economics are unchanged.
-
-| Topic | Decision |
-|---|---|
-| Audience | Public Workshop mod. Neutral names, works without other mods. |
-| Bakery mod | Optional. If installed, its goods can be sold from a display case. |
-| Moving | The player drives the vehicle, parks and opens. |
-| Staffing | The player works the window first. Hires can run a vehicle alone, including driving it between spots on a schedule, in version 1. Hires are the game's own employees, unassigned to any building; the vehicle's BizMan page puts them on it and builds the route stop by stop. The crew sells what is loaded and the player restocks (Peter, 8 October 2026). |
-| Long run | A small fleet is possible. Each vehicle needs its own permit; there is no cap on their number (Peter, 8 October 2026). Never a replacement for buildings. |
-| Licence | Fee plus the game's existing Food Safety course, bought by phone from the City of New York. |
-| Pitches | Park anywhere legal, plus curated premium spots and temporary event pitches. Area type is automatic from nearby buildings, with hand-drawn zones on top. |
-| Illegal spot | The Open button is disabled and says why. No fines. |
-| Equipment | Version 1: plain inventory, no placement. The game's own equipment items (hot dog grill, coffee machine and so on): carry one to the vehicle and click it to fit it; fitted equipment uses cargo space. Each piece brings its own storage for the foods it serves (see Restocking). Later: place equipment inside the truck ("tetris"). |
-| Restocking | Buy boxes at a wholesaler, carry them out and click the cart or truck to load them, the way the game loads a car. A hand truck full of boxes can be unloaded into the cart the same way. Pushing the cart into a store and loading it at the shelves still works, as with the game's hand truck; kept for now. Storage per piece (Peter, 10 October 2026; replaces one limit per vehicle of 80 and 160 units): each fitted piece of equipment holds 40 units on a cart and 80 on a truck of the foods it serves, a coffee counting a quarter and a pastry half. A piece serving several foods shares its room; the Extra Storage piece takes a slot, serves nothing and doubles every piece; food with no fitted piece doesn't load. Loading a box that doesn't fit whole moves what fits, and the box with the rest stays in the player's hands. The commissary (below) sells whole boxes, and its Fill up (Commissary stock) fills each piece. |
-| Economy | Game-calibrated. Real NYC shape, Big Ambitions money. |
-| Sales payment | Player and crew window sales share one saved taking per vehicle and calendar day, paid in the game's midnight processing like shops (Peter, 17 October 2026). No per-sale balance change or money notice. Sales still count in the sold day's books; vehicle removal and the confirmed uninstall step pay any unsettled takings back. |
-| Demand | Own thematic model: area type, neighbourhood character, daypart and product category. Strong peaks, lunch about 3x in office areas. Not based on `trafficIndex`. |
-| Ladder | Cart, then truck. |
-| Version 1 extras | Weather and seasons, catering gigs, visible queues, health grades, regulars on a route, same-food competition. |
-| Game market | Read the game's per-neighbourhood product demand one-way. Trucks don't count as providers. |
-| Player view | A "Street food" filter category on the game's city map: offices, factories, nightlife, theatres and cinemas, premium spots. Not expected sales. |
-| Tax | Truck sales are added to the game's taxable income through a Harmony patch, at the game's own rate. |
-| Show surges | Fixed times near theatres and cinemas, bigger at weekends. |
-| Off-screen | Sales away from the player and hired trucks are statistical; customers are visible within about 100 m. |
-| Pricing | The cart behaves like a shop: the standard price by default, the price a pricing manager covering the district sets, or the player's own price per product, set in the Prices section of the vehicle's BizMan page (15 October 2026). Where feasible it appears in the game's business screens like a shop (to research: those screens are built around rented buildings). |
-| Restocking day | Carts carry about half a day's stock; a refill at a wholesaler during the day is expected. The player buys only what fits, so no full box is needed. |
-| Coffee | The step after hot dogs: the industrial coffee machine (the shop machine; the cheap one is an office item), fast service, its own crowds (morning commuters, parks at weekends and on warm afternoons). It should earn more than a hot dog cart at its own spots and cost more to start. |
-| Crowds add up | A spot's area types are not exclusive: offices nearby bring an office crowd, a nightclub a nightlife crowd, and the two add up rather than share a total. Every pavement also has ordinary street traffic at every hour. Who buys at a given hour follows who is there then. (Peter, 8 October 2026, after a spot next to offices and a club read as near-empty at lunch.) |
-| Nightlife and parks | Nightlife pitches come from buildings: nightclubs, theatres and cinemas nearby. Parks are their own area (Peter, 14 October 2026), found from the game's own park areas. Hand-drawn zones are for what the mod can't find: parks the game has no area for, the waterfront, tourist stretches. |
-| Staff skill and queues | Service speed follows the worker's customer service skill times their satisfaction (the game's own measure; the player serves with theirs, 50 at the start): 50 serves at the base speeds the balance uses, low skill about 1.5× slower, top skill about 30% faster. Each vehicle's queue has a limit (cart about 6, truck about 10); arrivals at a full queue walk on. So skilled staff pay off at peaks and cheaper staff off-peak. As in the game, low skill makes customers complain and high skill pleases them, feeding reputation. All three in the data files. (Peter, 8 October 2026; in the game itself skill affects only satisfaction, not speed [code].) |
-| Messages | In-world wording: say what happens in the game ("The cart can't open without any equipment installed"), never how to use the interface. Maintenance tools such as the uninstall step may stay plain. |
-| Not chosen | Grey-market permits, fines, time-restricted streets, per-area demand curves. |
-
-## Core loop
-
-1. Take the street food course and buy the vendor licence.
-2. Buy a cart, buy equipment, carry stock out of a wholesaler and load it into the cart.
-3. Push or tow the cart to a pitch, open, serve the queue yourself.
-4. Sell out or close, restock, move to the next pitch for the next peak.
-5. Save up for a truck: more menu slots, more stock, more staff, catering.
-6. Hire staff and add trucks, each with its own permit.
-
-The day is shaped by the demand curve. A good day is a breakfast or lunch pitch in an office area, a restock, and an evening pitch near nightlife or a market. Finding a good spot is the reward: a pitch where offices, venues and transit meet can carry a whole day, and staying there is fine. Moving pays when a spot's peak has passed and another spot's is starting (Peter, 8 October 2026; replaces the earlier rule that staying must earn clearly less).
-
-## Working at the window (Peter, 18 October 2026)
-
-**Pending in game.** Working a cart's held serving stance or a truck's hatch uses the game's activity panel: native fast-forward, a skip button and a 5–720 minute work-duration slider. Fast-forward speeds the game world together with customers and sales. Work skips keep the same Core sales and stock rules, minute by minute, and native register-work needs drain; stock exhaustion or window closure stops a skip. The native end-of-skip finishes work; the window can remain open for crew. A cart's Work the window action returns to its stance; merely remaining nearby after stopping no longer serves it. Truck Back to the hatch is unchanged.
-
-The bottom vehicle cargo panel shows actual stock while serving and refreshes as sales consume it. Serving offers no cargo transfers or driving actions. Work/skip state is transient and never enters the mod's save schema. All sales still go into the saved pot paid at midnight.
-
-## Licence and permits
-
-NYC separates the vendor licence (a person) from the permit (a cart or truck), and caps the permits at 5,100 citywide. The mod keeps both layers.
-
-- **Vendor licence.** Needs the game's existing Food Safety course. One fee, renewed every 60 in-game days. The player needs it to open. A vehicle's permit covers its crew, so hires don't need the course.
-- **Vehicle permit.** One per cart or truck. No cap on the number of permits.
-- **Where.** Both are bought by phone: the game's City of New York contact (the one that sends parking tickets) gets a call dialog. The game has no city hall.
-
-No waiting list and no grey market in version 1. Both are easy to add later as settings.
-
-Decided while building the Core (8 October 2026; numbers in `data/rules.json`): the licence can be renewed in its last 10 days and a renewal adds a full 60 days. The city texts when renewal opens and when the licence has run out. First fees, placeholders until the balance pass: $250 a licence, $500 a permit, both tax-deductible. The permit cap the Core first had (unlocks by days and sales) was dropped before Milestone 4's game side, and so was the free permit for older saves: the mod is unreleased.
-
-## Vehicles
-
-| | Cart | Truck |
-|---|---|---|
-| How it moves | Pushed on foot, anywhere in the city (slow); bridges use the game's bridge skip with walking time | Driven |
-| Equipment slots | 2 general + 1 dedicated cooler | 4 general + 1 dedicated cooler |
-| Stock | 40 units per fitted piece, 80 with Extra Storage (a one-piece cart sells out in about 4 hours at a good pitch) | 80 units per fitted piece, 160 with Extra Storage |
-| Window staff at once | 1 | Up to 2 |
-| Catering | No | Yes |
-| Pitch rules | Sidewalk spots | Curb spots |
-
-Decided 22 October 2026 (Peter): the employee roster has no size limit. **Add employee** on the vehicle's crew panel adds another employee; the Schedule tab rotates them across weekdays and consecutive shifts. Only simultaneous work is limited: one serving position on a cart and two on a truck. Each employee still belongs to one vehicle at a time. Existing crew and shifts retain their save format.
-
-Slots and stock are inventory counts in version 1. The tetris layout replaces the slot count later; the item list stays the same.
-
-Decided 9 October 2026 (Peter): the cart shows its fitted equipment on the counter, one piece per slot, using the game's own item model where it suits a cart and a small model of our own where it doesn't. Planned for Milestone 8; see the implementation plan.
-
-## Retiring a cart (22 October 2026)
-
-A closed cart can be sold with all its onboard equipment and stock at any commissary bay. On foot, select the cart and choose **Sell cart**. The confirmation shows the total using the game's normal resale setting. Selling closes that cart business: its permit, crew assignments, route, venue partnership and rented space end. Crew remain employed and unassigned, and earned wages remain due. Unpaid window sales are paid separately. Past accounts, the vendor licence, shared commissary stock and orders remain. Sale proceeds that fail to pay are retained for retry across saves.
-
-## Equipment and menu
-
-Decided 22 October 2026: the first cooler uses a dedicated customer-facing place, leaving the two/four general places free. Additional coolers consume general places so existing multiple-fridge setups stay valid. Coffee and slushie machines use general places. The optional fridge must still be bought and stocked; it holds 80 sodas on a cart or 160 on a truck, doubled by Extra Storage. Its existing add-on and standalone sales, prices and market-demand rules are unchanged. The cart shows a cabinet-front insert below the rear worktop on the customer side; the truck shows a shallow fridge at the rear of its serving counter, clear of the register, crew and closed hatch. No save schema change.
-
-Each piece of equipment unlocks products. The menu is whatever the fitted equipment allows, so slots force a trade-off between a wide menu and a fast one.
-
-| Equipment | Products (base game) | Notes |
-|---|---|---|
-| Hot dog grill | hot dog | Fastest service, low price |
-| Burger station | burger, french fries | Slower, higher ticket |
-| Coffee machine | cup of coffee, cup of tea | Breakfast peak |
-| Ice cream counter | ice cream | Strong in summer, weak in winter |
-| Pizza oven | pizza | Slowest, highest margin |
-| Cooler | soda can | Add-on sales, no prep time |
-| Display case | croissant, donut, cupcake | Bought in, no baking; Bakery mod goods here if installed |
-
-Item IDs come from the base game (`ba:itemname_hotdog` and so on). The Bakery mod's IDs are read from its bundle (see Technical answers, row 8).
-
-Water was removed from the street-food catalogue on 21 October 2026: `ba:itemname_water` is a factory ingredient, not bottled drinking water. The cooler serves soda only. Old saved water stock is retained, but cannot be sold or automatically restocked as street food.
-
-Each product has a service time. A customer order takes the longest service time of its items, so a burger slows the whole queue.
-
-## Pitches
-
-**Anywhere legal.** The player can open on any street spot that passes the siting rules. The rules follow NYC, simplified:
-
-- not within about 3 m of a crosswalk, subway entrance, driveway or hydrant
-- not in front of a building entrance (carts)
-- not in a no-stopping zone or on a highway (trucks)
-
-If the check fails, the Open button is disabled and names the rule.
-
-**Pitch demand** comes from the mod's own model (see [Demand](#demand)): the area type around the spot, the neighbourhood's character and the time of day.
-
-**Premium spots.** Two or three curated spots in every neighbourhood, about 15 to 20 in all, with a name and a character: Midtown office lunch, Financial District, a park gate, a university, nightlife streets, the waterfront. They have a traffic bonus and their own demand curve (nightlife peaks at night, parks at weekends). They are first come, first served, as in NYC where trucks claim spots at 3 to 5 a.m.: whoever parks first gets the spot, AI trucks included, and a taken spot shows as taken.
-
-**Event pitches.** Temporary spots announced a few days ahead: a weekend market, a game day, a street festival. High traffic for a few hours, an entry fee, a limited number of trucks.
-
-Decided while building 0.8.0 (9 October 2026, Peter away; numbers in `data/pitches.json`): 17 premium spots, each outside one building and named after its street, picked from the balance calculator's best pitches. The first of the player's vehicles to open on one holds it until it closes, with 1.25 times the passers and the spot's own crowd. Events are weekend markets and street festivals at 7 places; the City of New York texts 3 or 4 days ahead and sells up to 2 places per event by phone ($80 at a market, $120 at a festival). During an event only vehicles with a booked place may open there. There is no game day: the city has no stadium. A market brings a park's crowd on top of the street's (Peter, 14 October 2026: more customers rather than a lower fee), so a hot dog cart covers its $80 place at every market. The park premium spots (one at a park gate in each neighbourhood with a park) wait for the parks' positions from a test bridge run.
-
-## Demand
-
-The mod has its own demand model. It doesn't use the game's `trafficIndex`, which only says how busy a block is and nothing about who walks past or what they want. Demand here answers two questions per hour: how many people pass this spot, and how many of them want what this vehicle sells.
-
-```
-customers/hour = footfall × appetite(menu) × market × conditions × reputation
-```
-
-All tables live in a data file (`demand.json`) shipped with the mod, so balance changes need no code and players can tune them.
-
-### Areas
-
-Every street spot gets an **area type** in two layers:
-
-1. **Automatic.** The mod reads the building types and business types within about 50 m. This covers every legal spot in the city, and it changes when the city changes: a nightclub opening next door makes the spot more of a nightlife spot.
-2. **Hand-drawn zones.** Polygons in the data file add or override the automatic result where the buildings don't tell the story: the theatre blocks in Hell's Kitchen, the Industry City market courtyard, the waterfront, tourist stretches in Midtown, a park the game has no park area for. Curated premium and event pitches set their area type directly.
-
-Parks are found automatically too. The game marks each park with a trigger volume that gives the player its walking-in-the-park happiness boost (`LocationHappinessTrigger`), and the skate park with its own [code, 1.0]. A spot within the classifier's radius of one counts it like a building, at the distance to the park's edge (0 inside): a park votes 1.5 for `park`, the skate park 0.75, so a pitch at a park's gate reads a park presence of about 0.7.
-
-| Area type | Comes from | Who walks past |
-|---|---|---|
-| Office | office buildings | commuters and office workers, weekdays |
-| Retail | shops, cinemas | shoppers, afternoons and weekends |
-| Residential | residential buildings | locals, mornings, evenings, weekends |
-| Nightlife | nightclubs, bars, theatres | evening and late-night crowds |
-| Industrial | warehouses, factories | shift workers, early and late |
-| Park | the game's park areas, park zones | joggers and dog walkers in the morning, office workers at weekday lunch, families and walkers on weekend days; empty at night, in rain and in winter |
-| Waterfront | waterfront zones, piers | walkers and tourists, warm weekends |
-
-A spot can be several types at once, and their crowds add up: each type has a presence from 0 to 1 that grows with the number and closeness of its buildings (two office buildings nearby read about 0.67), and each brings its own crowd on top of the ordinary street traffic every pavement has. Who buys at a given hour follows who is there then.
-
-### Neighbourhood character
-
-Each game neighbourhood has a character that scales area footfall and shifts appetite. First draft, meant to be argued over:
-
-| Neighbourhood | Character | Strong | Weak |
-|---|---|---|---|
-| Midtown | towers, commuters, tourists | coffee and bakery 07 to 10, lunch everything | late night, weekends outside tourist spots |
-| Lower Manhattan | finance, offices | coffee breakfast, lunch | evenings and weekends almost dead |
-| Murray Hill | young residents, bars | weekend brunch (coffee, bakery), late-night pizza and fast food Thu to Sat | weekday lunch |
-| Hell's Kitchen | theatres, restaurants, nightlife | pre-theatre 17 to 20, late-night hot dogs and pizza | breakfast |
-| Garment District | workshops, cheap offices, through traffic | fast food at lunch and late night | coffee and bakery premium items |
-| Industry City | warehouses, factories, weekend markets | coffee and bakery 05 to 08 at shift start, fast food at lunch and 22 to 02 for night shifts, weekend market crowds | weekday afternoons |
-| Hamptons | summer resort | ice cream, coffee, bakery on summer weekends | everything in winter |
-
-### Footfall
-
-People passing per hour = (street baseline + Σ area presence × area curve × area day factor) × neighbourhood factor (by daypart and day) × season × weather × promotion. A player-edited data file from before 0.3.1 has no street baseline, so spots without classified buildings get no passers until one is added. Dayparts:
-
-| Daypart | Hours |
-|---|---|
-| Early | 05 to 08 |
-| Morning | 08 to 11 |
-| Lunch | 11 to 14:30 |
-| Afternoon | 14:30 to 17 |
-| Evening | 17 to 21 |
-| Late | 21 to 02 |
-
-Example footfall multipliers, weekday (1.0 is an average open hour city-wide):
-
-| Area | Early | Morning | Lunch | Afternoon | Evening | Late |
-|---|---|---|---|---|---|---|
-| Office | 0.8 | 1.2 | 3.0 | 0.5 | 0.6 | 0.1 |
-| Retail | 0.1 | 0.5 | 1.2 | 1.3 | 1.0 | 0.2 |
-| Residential | 0.6 | 0.7 | 0.5 | 0.5 | 1.0 | 0.4 |
-| Nightlife | 0 | 0.1 | 0.4 | 0.3 | 1.5 | 2.0 |
-| Industrial | 1.5 | 0.4 | 1.5 | 0.3 | 0.5 | 1.0 |
-| Waterfront | 0.1 | 0.4 | 0.8 | 1.2 | 0.8 | 0.1 |
-| Park | 0.15 | 0.5 | 1.4 | 0.9 | 0.6 | 0.05 |
-
-Day of week is per area: offices and industrial drop to 0.2 at weekends; nightlife peaks Thu to Sat; residential, retail and the waterfront rise at weekends. An area can have its own weekend curve, season and rain factors (14 October 2026). Parks use all three: a weekend day runs 0.9 in the morning, 2.4 at lunch, 2.8 in the afternoon and 1.2 in the evening; summer 1.3 and winter 0.35 on top of the month's footfall; rain 0.4 on top of the 0.5 every passer has. Park crowds want ice cream, slushies and snacks about twice as often, cold drinks 1.8 times, hot dogs and coffee 1.2 times, sit-down food less. Weekend here means Saturday and Sunday, after the night's shift (01:00 on Saturday is still Friday night). The game's own `TimeHelper.IsWeekend` also counts Friday, but it only uses that for nightclub fees, so the mod keeps Friday a weekday with its own day factor. The game has no public holidays, so weekends stand for them.
-
-### Appetite
-
-Appetite is the share of passers who want a product category in that daypart. Categories:
-
-- coffee and tea
-- bakery (croissant, donut, cupcake, Bakery mod goods)
-- fast food (hot dog, burger, fries)
-- pizza
-- ice cream
-- cold drinks
-
-Example base appetite, before neighbourhood shifts:
-
-| Category | Early | Morning | Lunch | Afternoon | Evening | Late |
-|---|---|---|---|---|---|---|
-| Coffee and tea | 0.40 | 0.30 | 0.08 | 0.15 | 0.05 | 0.02 |
-| Bakery | 0.25 | 0.20 | 0.05 | 0.12 | 0.03 | 0.02 |
-| Fast food | 0.03 | 0.05 | 0.30 | 0.08 | 0.20 | 0.35 |
-| Pizza | 0 | 0.02 | 0.20 | 0.05 | 0.20 | 0.30 |
-| Ice cream | 0 | 0.02 | 0.08 | 0.20 | 0.12 | 0.03 |
-| Cold drinks | 0.05 | 0.05 | 0.15 | 0.15 | 0.10 | 0.08 |
-
-The neighbourhood table shifts these: Midtown multiplies morning coffee and bakery by 1.4, Industry City multiplies early coffee by 1.5 and late fast food by 1.4, Garment District multiplies lunch and late fast food by 1.3 and bakery by 0.7, and so on.
-
-A menu's appetite is not the plain sum of its categories. The strongest category counts fully and each further category adds half its share, so a wider menu helps but a focused one is close behind. Cold drinks mostly add to the ticket instead of bringing new customers.
-
-### Market
-
-The game tracks demand per product per neighbourhood: 100 minus the number of shops selling it times 100 divided by the optimal number, plus hype and shortage events [code, July decompile]. The mod multiplies by this value / 100, with a floor of 0.3. Then a burger truck in a neighbourhood full of burger bars sells less, and the game's hype events on hot dogs reach hot dog carts too. The trucks don't count as providers in the game's market in version 1, so they don't depress shop demand; adding that is a later choice.
-
-### Conditions and reputation
-
-- **Season.** April to October 1.0, March and November 0.8, December to February 0.6. Ice cream 0.2 in winter, 1.3 in summer. Hamptons footfall 0.3 in winter. The game has no climate seasons, so the mod keeps its own calendar from the in-game day count; the season length is a setting. If the Alcware Seasons mod is installed, the mod follows its season instead.
-- **Weather.** Rain is the only weather the game has: footfall 0.5 while it rains, coffee appetite 1.3, ice cream 0.3. Heat and cold come from the season instead: winter raises coffee appetite by 1.3, summer raises cold drinks by 1.4 (ice cream by the 1.3 above).
-- **Reputation.** Health grade, regulars bonus and same-food competition, as described below.
-- **Marketing.** The player can buy marketing for one cart or truck on its BizMan page. It multiplies that vehicle's passers alongside the game's promotion and a pitch's bonus. See [Marketing](#marketing).
-
-### Live crowds from game businesses
-
-Where the game already simulates people, the mod uses them instead of a fixed curve:
-
-- **Nightclubs.** A nightclub's opening hours and customer count drive late footfall on its block. A full club at 01:00 means a crowd outside at closing time. The mod adds a closing-time surge in the 30 minutes after a club closes.
-- **Theatres and cinemas.** The game has no show times, so the mod uses fixed surge times for any spot near an open theatre or cinema: theatres let out at about 22:30 (plus a matinee at 17:00 at weekends), cinemas every 2.5 hours from 17:00. Surges are bigger at weekends than on weekdays. Theatre crowds favour hot dogs, pizza and cold drinks; cinema crowds favour ice cream and snacks.
-- **Offices.** The number of employees in office businesses nearby scales morning coffee and lunch footfall. A block of busy offices beats a block of empty office buildings.
-- **Factories and warehouses.** Shift workers in factory businesses drive the early and late peaks in industrial areas, timed to the game's shift schedules if the mod can read them.
-
-**Partnerships with your own businesses.** If the player owns a nightclub, theatre or office business, they can sign a "street food partner" deal with one of their vehicles. The vehicle gets a reserved spot outside and a share of the venue's crowd at closing time. The venue gets a small satisfaction bonus because its guests can eat. Partnering with AI venues for a fee is a later option. Built in 0.8.0 without the reserved spot: the deal is signed on the vehicle's BizMan page within 50 m of the venue, the venue's crowd counts in full and its surges are 1.5 times as big, and the bonus is 5 points of facility satisfaction after a day the partner sold there (the game's demand cache, row 10, can't carry it).
-
-See [Technical answers](#technical-answers) for what the mod can read. Anything it can't read falls back to the area curves above.
-
-### Showing it to the player
-
-A **"Street food" filter category on the game's own city map**, toggled like the existing filters. The map's filters highlight buildings by building type, business type, neighbourhood, address or a custom condition, and can carry a focus point [code: `CityMapFilters`, `CityMapFilterData.isAvailable`]. Filters:
-
-- Offices (office buildings and office businesses)
-- Factories and warehouses
-- Nightlife (nightclubs and bars), highlighted while open
-- Theatres and cinemas
-- Premium spots and today's event pitches, as address filters with a focus point
-
-The player works out which food fits which crowd, which keeps discovery in the game. Adding the category needs one Harmony patch on the map's filter setup, which calls the map's own private filter builders.
-
-### Calibration
-
-The base footfall is scaled so that a truck at a good spot and daypart matches the money target in [Economy calibration](#economy-calibration). The mod multiplies it by the game's customer promotion variable relative to its default, so the difficulty slider still affects trucks.
-
-The footfall and appetite numbers are mine, shaped by the NYC lunch peak (about 3x) and the research note. They are a starting point for playtesting.
-
-## Marketing
-
-Each cart or truck has a Marketing dropdown on its BizMan page: None, Flyers, Local ads or Citywide ads. Levels and prices live in `data/rules.json` under `marketing`; the reasoning behind the prices is in [docs/balance/marketing.md](balance/marketing.md).
-
-| Level | Passers | Cart a day | Truck a day |
-|---|---|---|---|
-| Flyers | +10% | $20 | $60 |
-| Local ads | +20% | $45 | $140 |
-| Citywide ads | +30% | $80 | $240 |
-
-A pick books the level from the next day. Picking charges nothing, and today keeps the level today paid for. Picking again the same day replaces the booking with no charge or refund. At each day change with a level booked, the mod charges that day's whole fee once through the game's bank, as "Marketing for {vehicle}" under the tax-deductible label "Street food marketing". Days the game skipped are neither charged nor marketed. If the player can't pay, the booking turns off and a notice says so. A level runs on a day only once that day's fee is paid, and sales still catching up on yesterday after midnight keep yesterday's level. The fee shows per vehicle in the day summary, the fleet report and Econoview's Marketing line. A save keeps an unknown level from a newer version as it is, and it runs as none.
-
-## Service, stock and queues
-
-- **Service rate.** About 12 customers per staff-hour at a typical mix, scaled by item service time. A one-person cart serves roughly 12 to 20 an hour; a three-person truck about 40.
-- **Queue.** Customers above the service rate join a visible queue at the window. They leave after about 20 minutes of waiting, sooner in rain. A long queue is the signal to hire.
-- **Stock.** Each product draws from the stock in the piece that serves it. A sold-out item disappears from the menu for the day. Selling out everything closes the window. Taking a piece out leaves its foods in the vehicle: they stay until sold (they come back on the menu with the piece) and only block new loads.
-- **Price.** Uses the game's normal price setting per product. The mod applies its own price-to-conversion curve, calibrated against the game's shop curve.
-
-Decided while building the Core (8 October 2026): patience is 20 minutes ±25% per customer, times 0.6 in rain, and the queue holds at most 12. A customer whose food has sold out walks on rather than buying something else. One simulation, minute by minute, drives both the visible queue and the sales away from the player.
-
-When the player stands in the window, the sale animation and register work the way they do in a shop, if the game allows it on a vehicle. Otherwise the player gets a simple serve action per customer.
-
-## Catering gigs
-
-Bookable jobs from offices, parties and events. Offers arrive as text messages from a "Street food bookings" contact, and the player accepts by replying or calling, using the game's contact and call dialog system (the SDK's BackAlleyDealer pattern). Booked gigs also appear as address filters on the map. Each gig has a date, time, place, guest count (40 to 200), a menu requirement and a fixed fee paid on completion. The truck must be at the place on time with enough stock. Missing a gig costs reputation. Real gourmet trucks earn 30% or more of revenue this way, so mature trucks should see a steady flow of offers.
-
-Decided while building the Core (8 October 2026): only trucks cater. Offers grow with items sold (full rate at 500) to about one every two days, at most two a day, scaled by a booking reputation that a failed gig cuts by 0.25 and a completed one raises by 0.05. Gigs are office lunches on weekdays, parties in the evening and weekend events, each with its own areas, times and guest counts, never more guests than a truck holds. A gig is 2 to 5 days ahead and must be accepted within a day. The truck may arrive up to an hour early and must be there by 10 minutes after the start, with the required food on its menu and one unit per guest, which is then held back from street sales. The fee is the guests × the food's reference price × 1.25. "Missing a gig costs reputation" means the booking reputation, so fewer offers; it doesn't touch street sales. Weekend events can also be at a park gate, a building at the edge of one of the game's parks (Peter, 14 October 2026).
-
-## Health grades
-
-Each vehicle has hidden cleanliness points. Dirty equipment, old stock and skipped cleaning add points. An inspector visits at random intervals: about every 12 in-game weeks for an A, 6 for a B, 4 for a C.
-
-| Grade | Points | Demand |
-|---|---|---|
-| A | 0 to 13 | 1.0 |
-| B | 14 to 27 | 0.9 |
-| C | 28+ | 0.75 |
-
-The grade shows on the window. The demand effect is an assumption; there is no NYC data on how much grades change cart sales.
-
-Decided while building the Core (8 October 2026): the points are the sum of daily marks over the vehicle's last 14 open days. An open day without cleaning adds 3 and selling stale stock adds 4, so cleaning every day keeps an A and never cleaning reaches C in two weeks. Closing doesn't wash points away, and doesn't clean, for a crew either. Cleaning happens only at the commissary where the vehicle rents its space: "Clean" in the vehicle's on-foot menu in that bay, a 20-minute time skip (Peter, 15 October 2026). A vehicle without a space can't be cleaned. The grade changes only when the inspector comes. A new vehicle shows "grade pending" (demand 1.0) until the first visit. After a 7-day gap, the inspector may come on any day with the same small chance, and finds a closed vehicle on its next open day. The intervals average 12, 6 and 4 calendar weeks, however often the vehicle opens, and there is no safe stretch after an inspection. The game has no inspections or reputation of its own [code, unverified in game].
-
-## Regulars on a route
-
-Opening at the same pitch on the same weekday builds a regulars bonus for that pitch, up to +30% over about six weeks. Missing a scheduled day removes some of it. This rewards a fixed weekly route over random driving. The numbers are invented and need playtesting.
-
-Decided while building the Core (8 October 2026): regulars belong to the whole fleet, by spot and weekday. A visit of at least an hour adds 0.05, so six weekly visits reach +30%. Each missed week takes 0.075 off that spot and weekday, counted even across days the game skipped.
-
-## Competition
-
-Vehicles within one block of each other add about 10% to the total foot traffic of the spot, but vehicles selling the same product split that product's demand. A hot dog cart next to a burger truck is fine; two hot dog carts halve each other. Shops are already covered by the game's market demand (see Market), so they don't count here.
-
-AI trucks are a later version. Until then, this rule only applies between the player's own vehicles.
-
-Decided while building the Core (8 October 2026): "one block" is 80 m; each open neighbour with something to sell adds 10% footfall, at most 30%. The split is by item, not category: hot dogs and burgers are both fast food, but the cart and the truck sell different things. A category's share is the average over the vehicle's items in it of 1 ÷ (1 + the neighbours selling that item). The split applies after the menu's ranking of its categories, so losing hot dog customers never makes the pizza oven count double.
-
-## Commissary and new foods
-
-Decided by Peter, 9 October 2026, for the eight new foods. These are new game items, and the game delivers only to the player's buildings.
-
-- **Commissaries.** A few fixed commissary garages around the city (in data, like the premium spots), each with a loading bay. The player rents a space for each vehicle by phone (Peter, 15 October 2026; it was in person, at the bay): the commissary's call has "Spaces", which lists the player's food vehicles in the game's list picker, each with its one action there (rent a space here, move its space here from another commissary, or give up its space here). The commissary texts the change into the conversation. A space costs $300 a month per cart and $1,250 per truck (NYC figures, `docs/research/nyc-food-trucks-2026-10-07.md`), charged daily as a tax-deductible expense. The first visit unlocks the commissary's phone contact, as the game's own contacts unlock.
-- **Hourly public parking (Peter, 13 October 2026, review round 1).** Rent covers only the hourly public parking increment for a food vehicle standing in the bay of its active rented space, using the same bay test as the 04:00 check and only already resolved bays. Street parking earlier that day stays due, even if the vehicle returns to its rented bay at 23:50. Midnight charges the remaining balance before the new day's first hourly increment. Elsewhere, at a commissary where that vehicle has no rented space, or with no resolved bay, the game's charge stays. Other vehicles and parking tickets are unchanged. One summary per vehicle at midnight logs the waived hours observed since load. *Core tested; pending in-game check.*
-- **Ordering.** By text to that contact, for the vehicles with a space there: the new foods, the game's own foods and the new machines, at wholesale price plus a delivery fee: a flat $250 per delivery, once for everything a commissary delivers that morning, however many orders, carts or trucks it is for (Peter, 14 October 2026; it was 10% of the goods). Orders arrive at 8:00 the next morning into the commissary's stock (kept in the save) and are paid when they arrive, goods and fee together, as the game's own deliveries are; an order the player can't pay for then is cancelled and the commissary texts why (Peter, 11 October 2026). Parked at the bay, the vehicle's "Commissary stock" button moves stock both ways (below).
-- **Overnight rule (soft).** A food vehicle that isn't within its commissary's bay at 04:00 is fined $250, more than a parking ticket, as a text from the City of New York. Not fined: a vehicle the player is in (sleeping in the truck), one whose crew is still serving, open at a late stop of its route (a route that sold out and closed early doesn't count), and one taken off the map in transit. Without a commissary space every vehicle out at 04:00 is fined, so carts without one pay too: the fine is the push to rent. Also not fined (Peter, 9 October 2026): a vehicle at a building the player rents or owns, a warehouse, a garage or any business. The game records a vehicle inside a building with that building's address, which counts; it has no parking lot belonging to a building, so outside, the vehicle must stand within the bay radius (15 m) of one of the building's entrances.
-- **Restocking (Peter, 9 October 2026).** Any of the player's food vehicles in a commissary's bay can load that commissary's stock, whether or not it has its space there.
-- **Commissary stock (Peter, 15 October 2026; replaces Restock).** The vehicle's panel in a bay has "Commissary stock", a list of what can move: "Fill up" loads food as Restock did (each fitted piece filled from its foods, a shared piece split evenly), "Take hot dogs: 1,200 here" loads one item and "Return hot dogs: 62 on board" gives one back. Food asks how many, offering as many as fit or all on board. Equipment moves only when picked by name, one piece at a time: taking a piece fits it, as far as the slots allow, and giving a piece back also returns the food that no longer fits without it. What goes back joins the commissary's stock at what the vehicle paid for it, keeps the day it first came on board (taking it again doesn't make stale food fresh) and, for goods first bought from a commissary, that origin for the uninstall's tax refund. A fitted piece that holds stock goes back with what it holds.
-- **Cleaning (Peter, 15 October 2026).** A vehicle is cleaned only at the commissary where it rents its space. Standing in that bay at the 04:00 check counts as cleaned for the service day that just ended, so a crewed vehicle stays clean by ending its route in its bay. Without a space a vehicle can't be cleaned, and its grade slips.
-- **Ordering screen (Peter, 10 October 2026).** Ordering stays in the commissary's conversation on the phone, the way the furniture stores take orders: the call's "Order stock" shows the game's phone order form with the commissary's foods and machines at box prices, up to 10 boxes an order, the delivery fee and the total; the commissary reads the order back, and "Confirm order" places it. Ordering is by phone only (Peter, 15 October 2026): the bay's button no longer opens the call. The call starts with "Order stock" and "Spaces and standing orders"; without a space there it starts at Spaces and Standing orders.
-- **New foods.** Dumplings, tacos, chopped cheese and grilled corn are new game items, with their machines (dumpling steamer, griddle, corn grill) as game items, sold only through the commissary. They are not furniture, so they can't be placed in a building, and the foods have no game market demand (fix round, 9 October 2026). Popcorn, cotton candy, slushies and kabobs turned out to be the game's own items (cinema and theatre concessions, the industrial grill) and are bought at wholesalers like the hot dog. Street food only in version 1: the game's own shops don't stock the new items.
-- **Hires.** A crewed vehicle restocks at a commissary bay where it rents a space, before it leaves for a stop; short stock is loaded as far as it goes and the commissary texts what was missing (14 October 2026).
-- **Supply.** Phone orders can repeat daily or weekly (the flat fee each delivery, shared with whatever else arrives that morning). Each food's boxes from phone orders are limited per game week, one limit for the whole fleet at all commissaries together (Peter, 14 October 2026), so a growing fleet stocks a warehouse. A logistics manager's plan can deliver from the player's warehouse to a commissary where they rent a space, with no fee. No wholesale contracts (Peter, 14 October 2026).
-
-## Warnings
-
-A food vehicle warns the player the way the game's shops do, with to-dos in the phone (Peter, 15 October 2026). Core's `VehicleWarnings` decides the list from the save and the tables. A menu food at or under a quarter of what its fitted pieces hold gives "low stock", and at none it gives "empty stock", as the game's shelves do. A vehicle with a route warns when it has fewer crew than it takes and when the route fails today's rules. Every vehicle warns without a permit, without a commissary space anywhere, and after a C from the health inspector. The vendor licence gives one fleet to-do from its renewal window on, and another once it has run out. Each warning is its own to-do type, numbered from 9201. Once a game minute the game side makes the to-dos that are missing and completes the ones that cleared. A click opens the vehicle's BizMan page, or the City's conversation for the licence, and the destination button points at where the vehicle stands. The to-dos never reach a save file. The mod takes them out while the game writes a save and puts them back straight after, so a save opened without the mod has none. Lost money is no warning: the overview shows a negative daily income in red, as the game does. *Core tested; pending in-game check.*
-
-## Economy calibration
-
-The target is game money, not NYC money:
-
-- A cart at a good lunch pitch makes about half of what a small fast food shop makes, with no rent and the player's full day.
-- A truck on a good route with one hire makes about the same as a small fast food shop, with lower fixed costs and more risk (weather, sell-outs).
-- A bad pitch loses money once staff and fuel are counted.
-- A fleet of four trucks stays below a mid-game business.
-
-Vehicle prices, equipment prices and permit fees are set as multiples of the cheapest small-shop setup at the current difficulty, so they scale with the game's price settings.
-
-## Technical approach
-
-Every business system in the game hangs off a rented building's `BuildingRegistration`: customers, BizMan, employees, revenue, rivals, tax. A vehicle has none of it, so the mod runs its own simulation and connects to the game at the edges.
-
-- **Vehicles.** Modded cart and truck from the SDK's `Example-Vehicle` pattern.
-- **Simulation.** Mod-owned, per vehicle, per in-game minute while open. Inputs: the mod's demand tables, the game's building types around the spot, the game's product market demand and its promotion variable.
-- **Customers.** Spawned pedestrians walk to the window and queue. Sales are decided by the simulation; the pedestrians are its visible side.
-- **Money.** Revenue paid into the player's account so it appears in the transaction history and counts for tax. If the API only allows a generic income line, the mod labels it clearly.
-- **Saves.** State in the save's `modData` (vehicles, equipment, stock, licences, grades, regulars, gigs), or an own file per save if that fails its test. What happens to mod vehicles when the mod is removed is untested; see the implementation plan.
-- **Patching.** Harmony where the API has no hook.
-- **Courses.** The street food course through the course system, if a mod can register one.
-
-## Technical answers
-
-Read from the current game build (`BigAmbitions.dll` of 23 September 2026, decompiled 7 October) and the Bakery mod's DLL. Nothing has been run in the game yet. **[code]** means read in the decompiled source; **[untested]** marks what still needs one in-game check.
-
-The official mod API is thin: business and vehicle registration, options, asset bundles, load events and a logger. Everything else means calling public game classes directly, plus Harmony where the game has no hook. Harmony is not shipped with the game. A mod bundles it in its `Dependencies\` folder, which the loader reads first.
-
-| # | Question | Answer | How |
-|---|---|---|---|
-| 1 | Demand inputs | Yes | Per-neighbourhood product demand is readable through `ProductMarketHelper.GetNeighborhoodDemand` (formula unchanged, plus hype, shortage and backorder events). Every building's address, type, business type, owner, rented state and neighbourhood are readable from `BuildingRegistrations`; positions from `CityManager.FindCityBuildingController` once the city is loaded. Neighbourhoods: Midtown, Lower Manhattan, Murray Hill, Hell's Kitchen, Garment District, Industry City, the Hamptons. |
-| 2 | Vehicle stock | Yes | A modded `VehicleType` has `maxCargoCapacity`; the vehicle's cargo is a list the mod can read and change (`TryToAddToCargo`, `ReduceFromCargo`, `GetAmountByItemName`). The game's stock HUD already shows it. The SDK's example asset has fields (`isATruck`, `isHandVehicle`) the 1.0 DLL no longer has. |
-| 3 | Revenue and tax | Partly | `GameManager.ChangeMoneySafe` pays money in and records a transaction; the mod can give it its own type and label through locale keys. Income tax is not taken from transactions but from each rented building's sales history, so truck sales are untaxed unless the mod adds them. Expenses (wages, licence fees) can use the game's own tax-deductible categories. |
-| 4 | Course | Yes, with a patch | The enum has `DiplomaName.FoodSafetyCourse`, but the 1.0 business school has no door for it (seen in game, 9 October 2026), so the mod registers its own course data and offers it on the Market Demands door (see the implementation plan's playtest fixes). The mod checks `EducationHelper.HasCompletedDiploma`. A brand-new course is not practical: course names are a fixed enum and the education screens throw on unknown values. |
-| 5 | Weather | Rain only | `RainHelper.isRaining` is readable. There is no snow or temperature. The game's "seasons" are Halloween and Christmas decorations from the real-world date, not climate. Time and day of week are readable, with `onNewHour` and `onNewDay` events. |
-| 6 | Visible queues | Partly | No outdoor queue exists to reuse; customers only exist inside buildings. The mod spawns its own characters (the pattern the game uses for passengers getting out of cars), walks them on the navmesh and runs its own line. Street people only exist within about 100 m of the player and vanish when the player enters a building, so queues are visual near the player and sales are statistical elsewhere. |
-| 7 | Serving | Custom | The cash register depends on being inside a building and can't be reused. The game has outdoor seller stands (`SellerStandController`) with a standing seller and direct payment; the truck window copies that pattern with its own interaction. A hired worker at the window is a placed character with the register animation, run by the mod. |
-| 8 | Bakery mod | Yes | Products `bakeryxx:itemname_bread`, `_bun`, `_chocolatecookie`, `_latte`, `_americano`; equipment `bakeryxx:itemname_breadcounter`, `_bistromachine`. Detected with `ItemsGetter.IsModItem` at city load. |
-| 9 | Live venue data | Partly | Opening hours of every business, player or AI, are readable (`scheduleDays`, `BusinessHelper.IsBusinessOpen`). Hourly customer counts exist for the player's own businesses; AI ones only have randomised forecasts. Cinemas and theatres have no show times, only hourly customers. Player offices and factories have shift schedules; AI ones only a head count. |
-| 10 | Venue bonus | Yes, another way | The cached list (`cachedFulfilledCustomerDemands`) is rebuilt from the venue's own items on every daily update and item change, and its customers never demand food, so an added entry does nothing. 0.8.0 patches the daily `BusinessHelper.UpdateSatisfaction` instead and raises the facility part after a day the partner worked outside. |
-| 11 | Hired drivers | Simulated | The game has no NPC that drives a player vehicle on its own. The private driver drives you, and the taxi fades the screen and teleports. The mod moves a hired truck by marking it in transit for the game's travel-time formula, then placing it in a free parking spot at the destination. A visibly driving truck would need the private-driver code and Harmony; that's a later option. |
-| 12 | Push cart | Yes | The game's hand truck is a vehicle the player pushes at walking speed, with cargo. The cart copies that pattern. [untested] whether a modded hand vehicle needs extra tags. |
-| 13 | Legal spots | Partly | For cars, "legal" means all wheels inside a parking lane that isn't disabled parking; the game already computes it. There's no data for hydrants, driveways or no-parking zones, and crosswalks only have a tag. Carts on the pavement need the mod's own rule: distance from crosswalks and building entrances. |
-| 14 | Save data and UI | Partly | Each save has a `modData` dictionary that nothing in the game uses; the mod keeps its state there as JSON [untested that it saves and loads]. Mods can't add a phone app without patching: the app list is a fixed enum. Contacts, text messages, call dialogs and notifications are usable. |
-
-### What this changes in the design
-
-- **Licence.** Requires the game's Food Safety course instead of a new "Street food" course.
-- **Seasons.** The mod runs its own climate calendar from the in-game day. Rain is the only weather. Cold and heat effects go away unless another mod adds temperature.
-- **Theatres and cinemas.** No show times exist. The mod uses fixed surge times near open venues, bigger at weekends.
-- **AI venues.** Use opening hours, size and business type; real customer counts only for the player's own venues. Partnerships with the player's own venues work fully.
-- **Tax.** A Harmony patch adds truck sales to the game's taxable income.
-- **Crowd map.** Not a phone app. A filter category on the game's city map, added with a Harmony patch.
-- **Hired driving.** Simulated travel and placement, not visible driving, in version 1.
-- **Pitch legality.** Trucks: the game's own parking lanes. Carts: pavement with the mod's distance rules. The "anywhere legal" rule therefore means "any parking lane" for trucks.
-- **Queues.** Visible within about 100 m of the player; statistical otherwise.
-
-## Versions
-
-**Version 1.** Cart and truck, licence with course, a permit per vehicle, equipment as inventory, anywhere-legal plus premium and event pitches, the thematic demand model with weather and seasons, live crowds from nightclubs, theatres, offices and factories (opening hours for all venues, real counts for the player's own), the Street food map filters, partnerships with the player's own venues, visible queues, catering gigs, health grades, regulars, same-food competition between the player's vehicles, per-save state. The player works the window; hires can serve alone and drive a vehicle along a schedule.
-
-**Later.** Partnerships with AI venues. Equipment placement inside the truck. AI food trucks (possibly through BusinessBridge). Waiting list and grey-market permits as settings. Time-restricted streets.
-
-## Answered design questions
-
-- Version 1 keeps the full scope, built in milestones; see [implementation-plan.md](implementation-plan.md).
-- A vehicle's permit covers its crew.
-- Shop competition comes from the game's market demand only.
-- Carts cross bridges with the game's bridge skip and walking time.
-
-- The cart is pushed on foot and can go anywhere in the city. It's slow, so cross-city moves cost most of a daypart.
-- Hired workers can run a vehicle alone in version 1, including driving it between spots on a schedule.
-- Premium spots and hand-drawn zones: two or three in every neighbourhood, Hamptons included.
-- Premium spots are first come, first served.
+# Food Trucks: design decisions
+
+Food Trucks is a public Workshop mod for Big Ambitions that adds street food as an early-game business. The player starts with a hand cart, moves up to a truck, and later runs a small crewed fleet supplied through commissaries. This file lists the decisions still in force and the game constraints behind them. Exact numbers live in the tuning tables: [rules](../data/rules.json), [economy](../data/economy.json), [demand](../data/demand.json), [pitches](../data/pitches.json) and [commissaries](../data/commissaries.json). The public contract for other mods is [vendor-api.md](vendor-api.md). In-game acceptance is in [CHECKS.md](../CHECKS.md) and bridge operations in [test-bridge.md](test-bridge.md). The [NYC research note](research/nyc-food-trucks-2026-10-07.md) is dated background, not a spec.
+
+## Decisions
+
+### Game boundary and saves
+
+- Every native business system (customers, BizMan, staff, revenue, tax) hangs off a building's `BuildingRegistration`. Vehicles have none, so Core simulates street food and the game only shows the result.
+- Core owns the street-food rules. Unity code stays in thin adapters. Native UI that needs a registration gets a transient stand-in, never added to the game's registrations or saved, and its patches do nothing unless that stand-in is showing.
+- Per-save state is versioned JSON in `GameInstance.modData`, so it travels with the save.
+- Save schema is 2. Schema 1 migrates unchanged: its takings pot held only unpaid crew sales, because player sales were paid on the spot then.
+- A save or block written by a newer mod version loads read-only. Unknown data is kept as written and never overwritten.
+- The truck logo is an optional, separately versioned field on the vehicle. A malformed, unknown or newer logo survives round-trips untouched, cannot be edited, and never invalidates financial state.
+- Mod-only phone to-dos never reach a save file. They are removed while the game serializes and put back after, so a save opened without the mod has none.
+- Removing the mod safely means running its uninstall step first. The first spike showed that a save held mid-interaction loses world interaction once the mod is gone.
+
+### Licensing, food and the economics target
+
+- The game's diploma names are a fixed enum, and the 1.0 business school has no door for its Food Safety course. The mod registers that course's data and offers it at the Market Demands door.
+- One renewable vendor licence for the player, sold by phone from the City of New York. Each cart or truck needs its own permit. Permits are uncapped, and a vehicle's permit covers its crew.
+- A fleet-only player hires through the native recruitment agency. Basic HR stays required. The agency lists "Street food fleet" for customer service campaigns, and candidates arrive unassigned and ready for a crew.
+- Economics are tuned against the game's own early options at the same difficulty: delivery driving and a small starter shop. A hot dog cart at a good route sits between them. Good spots should pay well, and staying at one is fine. The old rule that staying must earn clearly less than moving was dropped. Rationale: [cart-economics.md](balance/cart-economics.md).
+- Shops affect street food only through the game's per-neighbourhood market demand, read one way. Vehicles do not count as providers in the native market.
+- The player's own vehicles compete by item, not category. Nearby vehicles add some footfall, and vehicles selling the same item split that item's customers.
+- Area crowds add up independently on top of an ordinary-street baseline every pavement has. Offices and a nightclub next door both bring their own crowd.
+- Rain comes from the game. Season comes from the mod's own calendar on the in-game day count, because the game has no climate seasons.
+
+### Equipment and supply
+
+- A cart has two general equipment places and a truck four. Each also has one dedicated place for the first drinks fridge. Extra fridges use general places, so older multi-fridge setups stay valid with their stock.
+- Fitted equipment decides the menu and stock. Each piece holds a fixed number of weighted units of the foods it serves. A food with no fitted piece cannot be loaded.
+- Extra Storage takes a general place, serves nothing and multiplies every piece's storage. A second one is refused. On a cart the trade-off between storage and a second menu item is intended.
+- The game's `ba:itemname_water` is a factory ingredient, not bottled water, so it is out of the catalogue. Existing water cargo and commissary stock stay saved. Nothing sells, restocks or newly books it, and orders already booked keep their original delivery.
+- Popcorn, cotton candy, slushies and kabobs are base-game items on native machines (cinema and theatre concessions, the industrial grill), bought at wholesalers like hot dogs.
+- The four mod foods are dumplings, tacos, chopped cheese and grilled corn, with their own machines. They are game items sold only through commissaries. They are not furniture and have no native market demand.
+- The Bakery mod is optional. Its items reach a vehicle only when it is installed.
+- Item IDs, weights and equipment mappings live in [economy.json](../data/economy.json).
+
+### Commissary
+
+- A commissary's phone contact unlocks on the first visit. Spaces are rented, moved and given up through its phone call.
+- Phone orders arrive at 08:00 the next morning and are paid on arrival. A delivery fee is charged once per commissary and morning, shared across every order delivered there that morning. Hauled stock and logistics deliveries pay no fee.
+- Each food has one weekly box limit across all commissaries together, for the whole fleet. A growing fleet is meant to build supply through the player's own warehouse and a logistics plan, which delivers to a rented commissary with no fee.
+- In any commissary bay, "Commissary stock" moves chosen items both ways. Returned goods keep what the vehicle paid, the day they first came on board and their commissary origin. Nested stock travels with its piece.
+- Rent waives only the hourly public parking increments for that vehicle while it stands in the resolved bay of its own rented space. Street parking earlier that day stays due.
+- The 04:00 overnight fine is separate from rent and also applies to vehicles with no space anywhere. That is the push to rent.
+- A vehicle is cleaned only at the commissary where it rents. Standing in that bay at the 04:00 check counts as cleaned.
+- The native contacts app ties a contact's address to its tenant's opening hours, which would block calls. Commissary contacts therefore stay addressless. The header shows the host building's address and a View on map button as display only ([#23](https://github.com/PeterHartwieg/big-ambitions-food-trucks/pull/23)).
+- With the map closed, View on map follows the native path. With the map already open, the mod calls `CityMap.FocusOnBuilding` so the card is selected too.
+- Set destination targets the host building's entrance. The game's GPS target is never treated as the bay stall.
+
+### Serving and money
+
+- The player serves from a held cart stance or a truck hatch. Walking away stops service, and "Work the window" returns to the stance.
+- Native fast-forward, the work skip and needs drain all run while serving. Core's sale clock still steps minute by minute, so a skip or fast-forward books the same sales as real time, never twice.
+- Every window sale, player or crew, goes into one saved pot per vehicle and calendar day. It settles once in the game's midnight processing and is booked on the day it was sold. No sale changes the balance directly.
+- Sales, stock cost, tax and the day summary are recorded once at sale time. Settlement never records revenue again.
+- Held visible orders flush into the pot before save, closing, a skip or vehicle removal.
+- A day that has not fully caught up stays held until it has, and then pays once. Failed or refused payouts stay saved for retry.
+- A same-stop route edit can replan a short approach leg. An already open window keeps serving within the stop's original hours as long as the vehicle has not actually moved.
+- A sold-out crew with a rented bay drives straight back once someone is on shift for the whole drive. Before this rule a truck could wait out several fined nights.
+
+### Pitch and stance safety
+
+- A truck pitch uses the game's parking-lane legality plus a reachable serving hatch.
+- A cart needs safe pedestrian ground for both the worker and the customers, on separate sides of the counter. Parking lanes, road, crosswalks and traffic strips are rejected. Customers never stand in the road to rescue a server position.
+- There is no end-of-cart service. An earlier end-based or drifting stance looked workable but put the worker in the parking lane on a kerb edge, so a cart with no safe counter side shows no line and keeps unsafe crew hidden.
+- Worker, player and the first customer share the midpoint of the two fitted worktop pieces. With fewer than two, the counter centre is used. The below-counter fridge does not count.
+- The register faces customers. Equipment controls and the cart fridge face the worker side.
+- Two park premium pitches are curated: 23 Eleventh Street in Lower Manhattan and 5 Second Avenue in Hell's Kitchen. Each premium pitch has one active holder at a time.
+- Industry City's park keeps its ordinary park demand. A premium anchor there is deferred until a legal truck placement passes the hatch rule ([park study](balance/park-premium-pitches.md)).
+
+### Schedules and employee UI
+
+- Roster size and simultaneous staffing are separate. A roster has no size limit. A cart has one serving row and a truck two.
+- One employee belongs to one vehicle at a time.
+- Each crew member's shifts on any row add up against the per-day cap in [rules.json](../data/rules.json). Shifts end at 24:00, so night work counts on each calendar day it touches. There is no rolling limit.
+- The native Schedule tab caps new shifts but not handle drags. The mod validates every edit before writing to Core, restores the accepted shifts on refusal, and redraws the rows on the next frame because the native callback still holds the edited objects ([#33](https://github.com/PeterHartwieg/big-ambitions-food-trucks/pull/33)).
+- Native day paste copies opening hours along with shifts. Before the game recalculates opening state, the mod restores the route's hours on the stand-in, including with no crew or an empty source day. Without that guard the Schedule tab is not offered ([#25](https://github.com/PeterHartwieg/big-ambitions-food-trucks/pull/25)).
+- Crew stay unassigned to any building, so native schedules, stations and sick days leave them alone. The employee list shows the vehicle name and a "Street food crew" task, counts crew as assigned, and routes Manage schedule to the vehicle page. All of this is display only ([#21](https://github.com/PeterHartwieg/big-ambitions-food-trucks/pull/21)).
+- The native business dropdown maps option i to building i - 1, so the vehicle is option 0 and every building keeps its index. Picking a building moves the employee there and off the crew, as in the base game.
+
+### Sale and removal
+
+- A closed, released cart in any commissary bay can be sold. The quote is the game's resale value for the cart plus its paid equipment and stock, nested stock included. This deliberately bypasses the native zero price for hand vehicles.
+- Confirmation rechecks the save, ownership, bay, closed state and quote. It settles that cart's takings and earned wages, then ends its permit, route, rental, pitch holds and venue partnership.
+- Shared commissary stock and orders, the licence, booked event capacity and past accounts stay. Crew stay employed and unassigned.
+- A sale payment that fails is kept in the save and retried after the cart is gone. No payout happens while the cart is still owned.
+- Uninstall refunds purchase price plus eligible paid cargo. It reads both the native street vehicle list and the private driver's stored list, by vehicle ID. Native `VehicleHelper.Delete` only clears the street list ([#24](https://github.com/PeterHartwieg/big-ambitions-food-trucks/pull/24)).
+- If any copy of a vehicle, an unpaid taking or another required cleanup remains, uninstall withholds both the success notice and the refund for that ID, so a retry cannot pay twice.
+
+### Marketing
+
+- Marketing is bought per vehicle on its BizMan page: none, flyers, local ads or citywide ads. Prices and footfall live in [rules.json](../data/rules.json) under `marketing`.
+- A pick takes effect the next day. Picking charges nothing, and today keeps the level it already paid for.
+- The fee is charged once at midnight through the game's bank, as a tax-deductible marketing expense. If the player cannot pay, the booking turns off and a notice says so. Skipped days are neither charged nor marketed.
+- Econoview has an itemized Marketing line. The fleet page's average daily income includes the fee.
+- Price rationale (modeled at 20 passers an hour, shipped lower): [marketing.md](balance/marketing.md). Shipped in 0.10.12 ([#36](https://github.com/PeterHartwieg/big-ambitions-food-trucks/pull/36)).
+
+### Events, catering and legacy locations
+
+- City events and catering use real building addresses in the game's own format. Street IDs are not locale keys, so the mod resolves addresses through the native address helper, never `Localizor`.
+- Fully booked city events still offer Set destination through the native guider.
+- When addresses are ready, invalid events are cancelled. Only unused booked places are refunded, exactly once. Invalid booked or started catering is removed without reputation, money or stock changes.
+- Address validation, refunds and expiry wait together until city data is ready. An unresolved address is unknown, never proof of a mismatch.
+- Stored phone text is repaired only for positively identified city messages whose event has not ended. Finished history stays as it was.
+- Address identity compares whole street aliases mapped to the game's street IDs, plus house numbers. Alias collisions and spelling-only differences stay unknown, and unknown keeps existing booking guidance verbatim.
+- An offer or booking becomes "no longer active" only on proof of inactivity. That changes the guidance text and nothing else, so the radius and metadata stay as written.
+- Each reconciliation pass uses one snapshot of street names and alias availability. Writes compare before writing and respect read-only state. Immediate and deferred paths apply the same hold rule.
+- A cross-minute name cache is deferred until there is a reliable invalidation signal and a measured need.
+
+### Native UI constraints
+
+- The phone app list is a fixed enum, so street food lives in BizMan. A vehicle page uses copied native parts, and the Schedule tab runs on the in-memory stand-in described under game boundary.
+- The fleet overview's first job is showing which vehicle needs attention. Warnings are real phone to-dos, decided in Core, as the game does for shops.
+- UI reuses native controls at native scale and style.
+- The serving stock panel can outlive `GameManager` during unload or quit. Teardown skips the native `ItemPanelUI.Toggle(false)` then, but still books held orders and releases listeners, work energy, game speed and the time machine ([#26](https://github.com/PeterHartwieg/big-ambitions-food-trucks/pull/26)).
+
+### Physical crew travel
+
+- Shipped crews travel offscreen on a timer: straight-line distance times a road factor, then placement at a free parking spot on arrival.
+- The physical driving probe is development-only. It compiles only with `FOODTRUCKS_CREW_DRIVING_DEV`, runs only in an FT test save with the `-foodtrucks-test` bridge and its ownership lock, and the release build checks that it is excluded.
+- Production may adopt a physical backend only after these gates: shared Persistent City routing and traffic priority, save/load continuity, and measured fleet cost and route economics ([route economics study](balance/crew-route-economics-2026-10-21.md)).
+- Persistent City would own road admission and journey progress. Food Trucks keeps vehicle, crew, stock and money state, and the integration stays optional.
+- The two mods count minutes differently, so day/minute origins are translated explicitly. Arrival comes from actual progress and parking admission, never from an estimate.
+- The native tank and damage stay authoritative. Only offscreen segments would get a separate fuel model, settled exactly once. Automatic refuel detours wait until reachable refuels are tested.
+- A live physical journey hands back cleanly before any timer fallback.
+- Crew parking, the routing rollout, cart pushing and refuelling each need separate approval.
+
+### Probe safety and provenance
+
+- Ownership tracks the exact native controller, session and generation. Stale tokens cannot write.
+- A refusal before engine acquisition makes no native writes.
+- After acquisition, interruption cleanup is synchronous. Pose, fuel and damage are preserved before release.
+- A stopped truck that still occupies a junction keeps a reported record until it is actually clear.
+- Global collision layers and masks are never changed, and the parking-gap proxy stays disabled.
+- Admission requires the cooked convex body to contain each wheel prism, exact NWH wheel references, a common traffic-trigger height band and a native wheel-step guard.
+- The low-speed straight envelope includes body, tilt, tracking and heading. Extra side padding stopped the truck near fixed pavement props and was dropped.
+- Completion counts only after real physical braking. A forced interruption hold is reported as a separate result.
+- The bounded pure pursuit, projection and braking equations were adapted from the MIT-licensed Driven Rides repository, revision `90981d0061418a4d4742792d90c62c6a686f2a80`: `Core/Drive/PursuitDriver.cs`, `Core/Drive/DriveLine.cs` and `Core/Drive/CarModel.cs`. The same copyright and permission notice (Peter Hartwieg) is in [LICENSE.txt](../LICENSE.txt). File hashes and the exact equations reused are in the [historical provenance record](https://github.com/PeterHartwieg/big-ambitions-food-trucks/blob/e97400846d190da299239e129fbcef50c3f4d6ef/docs/crew-driving-provenance.md).
+
+## Game integration constraints
+
+Observed against the inspected Big Ambitions 1.0 assemblies of 23 September 2026, unless a newer check is noted.
+
+- The official mod API is thin: registration, options, asset bundles, load events and a logger. Everything else calls public game classes or uses Harmony, which the mod ships in `Dependencies/`.
+- `BuildingRegistration` underlies BizMan tabs, schedules, employees, alerts and income. Normal BizMan tabs assume a building.
+- Income tax comes from rented buildings' sales history, not from transactions. Patches on `TaxCalculationHelper` add street sales at the game's own rate.
+- `GameManager.NewDay` runs payroll, parking and `BusinessHelper.RunDaily` before taxes, the daily UI and the midnight bank balance. Street-food settlement runs in the `RunDaily` prefix, inside that order.
+- Diploma names and phone apps are fixed enums. Education screens throw on unknown diploma values.
+- Market demand per product and neighbourhood is readable through `ProductMarketHelper.GetNeighborhoodDemand`.
+- Opening hours of all venues are readable. Hourly customer counts exist only for the player's own businesses. Cinemas and theatres have no show times, so surges use fixed times.
+- Customers exist only inside buildings and there is no outdoor queue to reuse. The mod spawns its own pedestrians on the navmesh. Street people exist only within about 100 m of the player, so queues are visible near the player and statistical elsewhere.
+- Native hand vehicles have zero resale price.
+- The private driver's garage moves a vehicle from `VehicleInstances` to the separately saved `privateDriverVehicleInstances` list. Native delete only clears the first list.
+- `ItemPanelUI.Toggle(false)` dereferences the `GameManager` singleton unchecked, and that singleton can be gone during unload or quit.
+- `ContactsApp.SetUpHeader` hides the address line and View on map for addressless contacts. Giving a contact an address ties its call button to the tenant's opening hours. With the map open, `buildingToFocus` only moves the camera.
+- Native map search indexes only buildings with business names, so address GPS cannot rely on it.
+- `GuidersManager.SetGuiderTarget(Address, Destination)` persists the custom destination itself.
+- `ScheduleDayButton` paste copies opening hours with the shifts. The Schedule tab caps new shifts at 12 hours but not handle drags.
+- `MyEmployees` reads business and task from a building only, and its business dropdown maps option i to building i - 1.
+- Release compatibility from 0.10.6: the dedicated-cooler runtime and its tuning (reserved cooler place, soda stock weight) ship together. Combining the newer cooler code with older tuning failed eight Core tests during the 0.10.5 reconciliation, so neither half ships alone.

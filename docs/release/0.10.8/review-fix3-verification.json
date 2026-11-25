@@ -52,7 +52,7 @@
     "reason": "This fix round supplies a rig plan; native acceptance remains pending.",
     "remoteAccess": false,
     "newScreenshots": [],
-    "plan": "docs/release/0.10.8/in-game-test-plan.md",
+    "plan": "https://github.com/PeterHartwieg/big-ambitions-food-trucks/blob/e97400846d190da299239e129fbcef50c3f4d6ef/docs/release/0.10.8/in-game-test-plan.md",
     "checklist": "CHECKS.md EA1-EA5"
   },
   "regressions": [
