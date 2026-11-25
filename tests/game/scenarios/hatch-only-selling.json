@@ -1,6 +1,6 @@
 {
   "name": "hatch-only-selling",
-  "checks": "CHECKS.md, Truck serves only from the hatch (0.9.8), rows 1, 2 and 3",
+  "checks": "CHECKS.md, Truck hatch and art, hatch-only selling (HO1 to HO3)",
   "needs": {},
   "steps": [
     {

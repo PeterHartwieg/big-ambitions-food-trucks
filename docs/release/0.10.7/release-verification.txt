@@ -55,7 +55,9 @@ Validation on main
 
 Approved gameplay evidence and limits
 - center-worker.md retains the approved branch's Windows placement evidence;
-  grill-facing.md and kerb-safety.md retain earlier checks and their scope.
+  grill-facing.md and kerb-safety.md retained earlier checks and their scope;
+  they are now at https://github.com/PeterHartwieg/big-ambitions-food-trucks/blob/e97400846d190da299239e129fbcef50c3f4d6ef/docs/release/0.10.7/
+  (removed from main in the markdown cleanup).
 - Final rebuild was not separately launched in game. Normalized compiled type,
   field and method signatures, all method bodies (nested types included), locals
   and exception handlers match the approved package for FoodTrucks, Core and
@@ -67,8 +69,8 @@ Approved gameplay evidence and limits
 - All local logs and xUnit TRX files: build/release-0.10.7/.
 
 Release copy
-- workshop/CHANGENOTE-0.10.7.md already matches the approved behavior and remains
-  unchanged. release-notes.txt and release-notes.bbcode.txt match its full text.
+- workshop/CHANGENOTE-0.10.7.md (now at https://github.com/PeterHartwieg/big-ambitions-food-trucks/blob/e97400846d190da299239e129fbcef50c3f4d6ef/workshop/CHANGENOTE-0.10.7.md)
+  already matched the approved behavior and remained unchanged. release-notes.txt and release-notes.bbcode.txt match its full text.
 - README names the final ZIP and corrects the old customer-facing cart-fridge
   statement. The new Workshop description explains worker-facing controls and
   doors and safe pavement on both sides; no contradictory placement claim found.

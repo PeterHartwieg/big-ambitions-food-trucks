@@ -1,6 +1,6 @@
 {
   "name": "phase-a",
-  "about": "Phase A of docs/ai-playtest-plan.md, started as a player would: one cart run by its crew from the Hell's Kitchen commissary, paid from the fresh character's own money. The cart works three buildings near the commissary, since a pushed cart walks between stops; every stop takes the default hours (from 11:00, three hours each, as the map pick gives them). The licence and permits come from the debug action, free. Growth is off here: with it on, the run buys the truck, its crew, stock and route once money less the reserve covers the truck.",
+  "about": "Phase A of docs/test-bridge.md#playthrough-runner, started as a player would: one cart run by its crew from the Hell's Kitchen commissary, paid from the fresh character's own money. The cart works three buildings near the commissary, since a pushed cart walks between stops; every stop takes the default hours (from 11:00, three hours each, as the map pick gives them). The licence and permits come from the debug action, free. Growth is off here: with it on, the run buys the truck, its crew, stock and route once money less the reserve covers the truck.",
   "save": "FT playtest",
   "commissary": "hells-kitchen",
   "licence": "debug",

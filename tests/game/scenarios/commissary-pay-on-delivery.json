@@ -1,6 +1,6 @@
 {
   "name": "commissary-pay-on-delivery",
-  "checks": "CHECKS.md, Commissary look and payment (0.9.10), rows 1 and 2",
+  "checks": "CHECKS.md, Commissary delivery and settlement, delivery success (CO1, CO2)",
   "needs": {},
   "steps": [
     {

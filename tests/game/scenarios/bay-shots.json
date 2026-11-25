@@ -1,6 +1,6 @@
 {
   "name": "bay-shots",
-  "checks": "CHECKS.md, Commissary look and payment (0.9.10), rows 6 to 8 and 12; Bays on the door's side and a heavier truck, rows B2 to B5",
+  "checks": "CHECKS.md, Commissary visual and logistics, bay appearance BV1 to BV4 and door side B2 to B5",
   "needs": {},
   "steps": [
     {

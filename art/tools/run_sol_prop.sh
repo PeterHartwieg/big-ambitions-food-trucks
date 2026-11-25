@@ -6,11 +6,18 @@ PORT="${2:?port}"
 shift 2
 IMAGES=()
 for img in "$@"; do IMAGES+=(-i "$img"); done
-PROMPT="$(sed -e "s#{REPO}#$REPO#g" -e "s#{OUT}#$OUT#g" "$OUT/prompt.md")"
+RUN="$REPO/build/art-runs/$(basename "$OUT")"
+mkdir -p "$RUN"
+if [ -n "${PROMPT_FILE:-}" ]; then
+    TEMPLATE="$(cat "$PROMPT_FILE")"
+else
+    TEMPLATE="$(cd "$REPO" && python3 art/tools/make_prop_prompts.py --prompt "${OUT#"$REPO"/}")"
+fi
+PROMPT="$(printf '%s' "$TEMPLATE" | sed -e "s#{REPO}#$REPO#g" -e "s#{OUT}#$OUT#g")"
 START=$(date +%s)
-echo "start $(date '+%Y-%m-%d %H:%M:%S') port $PORT" > "$OUT/codex.log"
+echo "start $(date '+%Y-%m-%d %H:%M:%S') port $PORT" > "$RUN/codex.log"
 codex exec -m gpt-6.1-sol -c model_reasoning_effort='"high"' -s workspace-write -C "$REPO" \
     -c mcp_servers.blender.default_tools_approval_mode='"approve"' \
     -c "mcp_servers.blender.env={BLENDER_MCP_PORT=\"$PORT\"}" \
-    -o "$OUT/report.md" ${IMAGES[@]+"${IMAGES[@]}"} -- "$PROMPT" < /dev/null >> "$OUT/codex.log" 2>&1 || echo "codex exit $?" >> "$OUT/codex.log"
-echo "end $(date '+%Y-%m-%d %H:%M:%S'), $(( ($(date +%s) - START) / 60 )) min" >> "$OUT/codex.log"
+    -o "$RUN/report.md" ${IMAGES[@]+"${IMAGES[@]}"} -- "$PROMPT" < /dev/null >> "$RUN/codex.log" 2>&1 || echo "codex exit $?" >> "$RUN/codex.log"
+echo "end $(date '+%Y-%m-%d %H:%M:%S'), $(( ($(date +%s) - START) / 60 )) min" >> "$RUN/codex.log"

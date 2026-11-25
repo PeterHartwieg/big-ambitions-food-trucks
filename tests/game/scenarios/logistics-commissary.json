@@ -1,6 +1,6 @@
 {
   "name": "logistics-commissary",
-  "checks": "CHECKS.md, Commissary from a logistics plan, rows W0, W3 and W6 (the fixture sets up what W2 does by hand)",
+  "checks": "CHECKS.md, Commissary visual and logistics, W0, W3 and W6 (the fixture sets up what W2 does by hand)",
   "needs": {},
   "steps": [
     {
