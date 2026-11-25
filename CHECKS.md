@@ -296,7 +296,7 @@ The public contract and its own pending native list are in [docs/vendor-api.md](
 
 ## Release smoke
 
-Any release that changes in-game behaviour needs rig proof on its PR first (screenshots, logs or tests showing before and after). Run this smoke on the exact final package when it differs from the rig-tested build in more than the version bump and release copy, or when no PR in the release has rig proof. Skip it when the feature PR already has rig proof and the final package only bumps the version (Peter, 2026-11-01: no redundant package smoke); record the skip and the PR with the proof in the release PR. Patch lines come from the log check.
+Any release that changes in-game behaviour needs rig proof on its PR first (screenshots, logs or tests showing before and after). Run this smoke on the exact final package when it differs from the rig-tested build in more than the version bump and release copy, or when no PR in the release has rig proof. Skip it when the feature PR already has rig proof and the final package differs from the rig-tested build only in version metadata or release copy (Peter, 2026-11-01: no redundant package smoke); record the skip and the PR with the proof in the release PR. Patch lines come from the log check.
 
 | Check | Do | Look for | Evidence |
 | --- | --- | --- | --- |
